@@ -24,3 +24,10 @@ dist/
 
 # Local network data
 local_network_data/
+
+build/
+dist/
+*.exe
+*.spec
+*.dist
+__pycache__/
