@@ -141,6 +141,9 @@ def delete_device():
     return jsonify({"ok": True})
 
 if __name__ == "__main__":
-    import webbrowser
-    webbrowser.open('http://localhost:5000')
-    app.run(debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)
+```
+
+Save it, then rebuild:
+```
+python -m PyInstaller --onefile --noconsole --add-data "templates;templates" --name NetTrack launcher.py
