@@ -56,6 +56,28 @@
   },
   {
     "hostname": "",
+    "ip": "192.168.0.135",
+    "mac": "F8:3D:C6:1E:2C:9D",
+    "vendor": "AzureWave Technology Inc.",
+    "randomized": false,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
+  },
+  {
+    "hostname": "",
+    "ip": "192.168.0.139",
+    "mac": "34:5A:60:6B:1D:9E",
+    "vendor": "Micro-Star INTL CO., LTD.",
+    "randomized": false,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
+  },
+  {
+    "hostname": "",
     "ip": "192.168.0.143",
     "mac": "66:E8:33:5F:3B:0C",
     "vendor": "",
@@ -89,17 +111,6 @@
   },
   {
     "hostname": "",
-    "ip": "192.168.0.182",
-    "mac": "B2:3C:B2:5C:24:9C",
-    "vendor": "",
-    "randomized": true,
-    "name": "",
-    "notes": "",
-    "room": "",
-    "type": "other"
-  },
-  {
-    "hostname": "",
     "ip": "192.168.0.185",
     "mac": "20:1C:3A:22:86:AD",
     "vendor": "Nintendo Co.,Ltd",
@@ -108,6 +119,17 @@
     "notes": "",
     "room": "",
     "type": "other"
+  },
+  {
+    "hostname": "",
+    "ip": "192.168.0.203",
+    "mac": "9A:B6:6F:AF:55:40",
+    "vendor": "",
+    "randomized": true,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
   },
   {
     "hostname": "",
@@ -122,6 +144,17 @@
   },
   {
     "hostname": "",
+    "ip": "192.168.0.238",
+    "mac": "72:F4:F7:8A:C1:7F",
+    "vendor": "",
+    "randomized": true,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
+  },
+  {
+    "hostname": "",
     "ip": "192.168.0.239",
     "mac": "A0:63:91:98:99:CA",
     "vendor": "NETGEAR",
@@ -133,14 +166,36 @@
   },
   {
     "hostname": "",
-    "ip": "192.168.0.245",
-    "mac": "F6:C2:F1:4A:2E:AB",
-    "vendor": "",
-    "randomized": true,
+    "ip": "192.168.0.240",
+    "mac": "70:08:94:4D:14:97",
+    "vendor": "Liteon Technology Corporation",
+    "randomized": false,
+    "type": "other",
     "name": "",
-    "notes": "",
     "room": "",
-    "type": "other"
+    "notes": ""
+  },
+  {
+    "hostname": "",
+    "ip": "192.168.0.242",
+    "mac": "D4:F3:2D:E9:B9:34",
+    "vendor": "Intel Corporate",
+    "randomized": false,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
+  },
+  {
+    "hostname": "",
+    "ip": "192.168.0.246",
+    "mac": "34:17:EB:DD:33:29",
+    "vendor": "Dell Inc.",
+    "randomized": false,
+    "type": "other",
+    "name": "",
+    "room": "",
+    "notes": ""
   },
   {
     "hostname": "",
