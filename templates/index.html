@@ -1,399 +1,511 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetTrack</title>
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg:       #070b12;
-            --surface:  #0c1220;
-            --surface2: #111a2e;
-            --border:   #1a2840;
-            --accent:   #00d4ff;
-            --accent2:  #00ff9d;
-            --warn:     #ffc800;
-            --danger:   #ff4560;
-            --text:     #8aaabb;
-            --text-dim: #2a4055;
-            --bright:   #d8eef8;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetTrack</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg:       #070b12;
+    --surface:  #0c1220;
+    --surface2: #111a2e;
+    --border:   #1a2840;
+    --accent:   #00d4ff;
+    --accent2:  #00ff9d;
+    --warn:     #ffc800;
+    --danger:   #ff4560;
+    --text:     #8aaabb;
+    --text-dim: #2a4055;
+    --bright:   #d8eef8;
+    --lldp:     #a78bfa;
+    --cdp:      #fb923c;
+    --inferred: #1a2840;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column;
+}
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── HEADER ── */
+header {
+    height: 52px; min-height: 52px; flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 1.5rem; gap: 1rem;
+    background: rgba(12,18,32,0.95);
+    backdrop-filter: blur(12px); z-index: 200;
+}
+.logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.1rem; color: var(--accent);
+    letter-spacing: 3px; display: flex; align-items: center; gap: 0.6rem;
+}
+.logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent); animation: blink 2.4s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+.header-stats { display: flex; gap: 1.5rem; margin-left: auto; }
+.stat {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem; color: var(--text-dim); letter-spacing: 1px;
+}
+.stat span        { color: var(--accent2); }
+.stat span.warn   { color: var(--warn); }
+.stat span.purple { color: var(--lldp); }
 
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Rajdhani', sans-serif;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
+/* ── TOOLBAR ── */
+.toolbar {
+    display: flex; gap: 0.5rem;
+}
+.btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem; letter-spacing: 1.5px;
+    padding: 0.3rem 0.75rem;
+    background: transparent; cursor: pointer;
+    border-radius: 2px; transition: all 0.2s;
+    text-transform: uppercase; white-space: nowrap;
+}
+.btn-accent  { border: 1px solid var(--accent2); color: var(--accent2); }
+.btn-accent:hover  { background: var(--accent2); color: var(--bg); }
+.btn-primary { border: 1px solid var(--accent); color: var(--accent); }
+.btn-primary:hover { background: var(--accent); color: var(--bg); }
+.btn-dim     { border: 1px solid var(--border); color: var(--text-dim); }
+.btn-dim:hover     { border-color: var(--accent); color: var(--accent); }
+.btn-warn    { border: 1px solid rgba(255,200,0,0.4); color: var(--warn); }
+.btn-warn:hover    { background: var(--warn); color: var(--bg); }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-        header {
-            height: 52px; min-height: 52px;
-            border-bottom: 1px solid var(--border);
-            display: flex; align-items: center;
-            padding: 0 1.5rem; gap: 1.5rem;
-            background: rgba(12,18,32,0.95);
-            backdrop-filter: blur(12px);
-            z-index: 200;
-        }
+/* ── MAP ── */
+#mapWrap { flex: 1; position: relative; overflow: hidden; }
+#mapCanvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; pointer-events: none;
+}
 
-        .logo {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 1.1rem; color: var(--accent);
-            letter-spacing: 3px;
-            display: flex; align-items: center; gap: 0.6rem;
-        }
+/* ── VIEW TOGGLE ── */
+.view-toggle {
+    position: absolute; top: 12px; left: 12px; z-index: 20;
+    display: flex; gap: 4px;
+}
+.btn-view {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem; letter-spacing: 1px;
+    padding: 0.25rem 0.6rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; border-radius: 2px;
+    transition: all 0.2s;
+}
+.btn-view.active { border-color: var(--accent); color: var(--accent); }
 
-        .logo-dot {
-            width: 8px; height: 8px;
-            background: var(--accent); border-radius: 50%;
-            box-shadow: 0 0 8px var(--accent);
-            animation: blink 2.4s infinite;
-        }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+/* ── LEGEND ── */
+.legend {
+    position: absolute; bottom: 12px; left: 12px;
+    background: rgba(12,18,32,0.9); border: 1px solid var(--border);
+    padding: 0.5rem 0.75rem; border-radius: 3px; z-index: 20;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem; color: var(--text-dim);
+}
+.legend-line {
+    width: 24px; height: 2px; border-radius: 1px;
+}
 
-        .header-stats { display: flex; gap: 1.5rem; margin-left: auto; }
+/* ── SCAN / TOPOLOGY OVERLAY ── */
+#scanOverlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1.2rem;
+    background: rgba(7,11,18,0.92); z-index: 50;
+}
+.scan-ring {
+    width: 72px; height: 72px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem; letter-spacing: 3px; color: var(--accent);
+}
+.scan-sub {
+    font-size: 0.72rem; color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+}
+.scan-progress-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 240px;
+}
+.scan-progress-track {
+    width: 100%; height: 3px;
+    background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.scan-progress-fill {
+    height: 100%; background: var(--accent);
+    border-radius: 2px; width: 0%;
+    transition: width 0.4s ease;
+}
 
-        .stat {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.72rem; color: var(--text-dim); letter-spacing: 1px;
-        }
-        .stat span { color: var(--accent2); }
-        .stat span.warn { color: var(--warn); }
+/* ── EMPTY STATE ── */
+#emptyState {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.6rem; color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; letter-spacing: 2px;
+}
 
-        .btn-rescan {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.72rem; letter-spacing: 2px;
-            padding: 0.35rem 0.9rem;
-            background: transparent; border: 1px solid var(--accent2);
-            color: var(--accent2); cursor: pointer; border-radius: 2px;
-            transition: all 0.2s; text-transform: uppercase;
-        }
-        .btn-rescan:hover { background: var(--accent2); color: var(--bg); }
-        .btn-rescan:disabled { opacity: 0.3; cursor: not-allowed; }
+/* ── NODES ── */
+.node {
+    position: absolute; transform: translate(-50%,-50%);
+    cursor: pointer; z-index: 10; user-select: none;
+}
+.node-body {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 4px;
+    transition: transform 0.15s;
+}
+.node:hover .node-body { transform: scale(1.1); }
+.node-icon {
+    width: 54px; height: 54px; border-radius: 10px;
+    border: 1.5px solid var(--border);
+    background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; transition: all 0.2s; position: relative;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.node.selected .node-icon, .node:hover .node-icon {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(0,212,255,0.3), 0 4px 16px rgba(0,0,0,0.4);
+    background: rgba(0,212,255,0.08);
+}
+.node.randomized .node-icon { border-color: rgba(255,200,0,0.35); }
+.node.randomized:hover .node-icon, .node.randomized.selected .node-icon {
+    border-color: var(--warn);
+    box-shadow: 0 0 20px rgba(255,200,0,0.25), 0 4px 16px rgba(0,0,0,0.4);
+    background: rgba(255,200,0,0.06);
+}
+.node.infra .node-icon {
+    border-color: var(--lldp);
+    box-shadow: 0 0 14px rgba(167,139,250,0.2), 0 4px 16px rgba(0,0,0,0.4);
+}
+.node-ping {
+    position: absolute; top: -3px; right: -3px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent2); box-shadow: 0 0 6px var(--accent2);
+    border: 1.5px solid var(--bg);
+}
+.node-ping.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+.node-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem; color: var(--bright);
+    text-align: center; max-width: 88px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.node-ip { font-family: 'Share Tech Mono', monospace; font-size: 0.58rem; color: var(--accent); }
+.node-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem; letter-spacing: 1px;
+    padding: 0.1rem 0.4rem; border-radius: 2px;
+    background: rgba(255,200,0,0.12); color: var(--warn);
+    border: 1px solid rgba(255,200,0,0.25);
+}
+.node-services {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.5rem; color: var(--accent2);
+    text-align: center; max-width: 88px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
-        #mapWrap { flex: 1; position: relative; overflow: hidden; }
+/* ── EDIT PANEL ── */
+#editPanel {
+    position: absolute; top: 0; right: 0;
+    width: 340px; height: 100%;
+    background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 100; transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    display: flex; flex-direction: column;
+}
+#editPanel.open { transform: translateX(0); }
+.panel-header {
+    padding: 1rem 1rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    justify-content: space-between; min-height: 48px;
+}
+.panel-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 3px;
+    color: var(--text-dim); text-transform: uppercase;
+}
+.btn-close {
+    background: transparent; border: none;
+    color: var(--text-dim); font-size: 1rem; cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    transition: color 0.2s; line-height: 1; padding: 0.2rem;
+}
+.btn-close:hover { color: var(--danger); }
+.panel-body { padding: 1rem; flex: 1; overflow-y: auto; }
+.device-header {
+    display: flex; align-items: center; gap: 0.75rem;
+    margin-bottom: 1rem; padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--border);
+}
+.device-icon-lg {
+    font-size: 1.8rem; width: 52px; height: 52px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
+}
+.device-meta-ip {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.9rem; color: var(--accent);
+}
+.device-meta-vendor {
+    font-size: 0.75rem; color: var(--text-dim);
+    margin-top: 0.15rem; font-family: 'Share Tech Mono', monospace;
+}
+.device-meta-warn {
+    display: inline-block; margin-top: 0.3rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem; letter-spacing: 1px;
+    padding: 0.15rem 0.5rem; border-radius: 2px;
+    background: rgba(255,200,0,0.1); color: var(--warn);
+    border: 1px solid rgba(255,200,0,0.3);
+}
+.form-group { margin-bottom: 0.8rem; }
+label {
+    display: block; font-size: 0.62rem; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--text-dim);
+    margin-bottom: 0.3rem; font-family: 'Share Tech Mono', monospace;
+}
+input, select, textarea {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border); color: var(--bright);
+    padding: 0.5rem 0.65rem;
+    font-family: 'Share Tech Mono', monospace; font-size: 0.78rem;
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    border-radius: 3px;
+}
+input:focus, select:focus, textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,212,255,0.08);
+}
+select option { background: var(--surface2); }
+textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.panel-footer {
+    padding: 0.8rem 1rem; border-top: 1px solid var(--border);
+    display: flex; gap: 0.5rem;
+}
+.btn-save {
+    flex: 1; padding: 0.6rem;
+    background: transparent; border: 1px solid var(--accent); color: var(--accent);
+    font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
+    letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer; transition: all 0.2s; border-radius: 3px;
+}
+.btn-save:hover { background: var(--accent); color: var(--bg); }
+.btn-del {
+    padding: 0.6rem 0.8rem; background: transparent;
+    border: 1px solid rgba(255,69,96,0.35); color: var(--danger);
+    font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
+    cursor: pointer; transition: all 0.2s; border-radius: 3px;
+}
+.btn-del:hover { background: var(--danger); color: white; }
 
-        #mapCanvas {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-        }
+/* enrichment pills */
+.enrichment-section {
+    margin-top: 0.75rem; padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+.enrichment-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem; letter-spacing: 2px; color: var(--text-dim);
+    text-transform: uppercase; margin-bottom: 0.4rem;
+}
+.pill-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.pill {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.58rem; padding: 0.15rem 0.45rem;
+    border-radius: 2px;
+}
+.pill-blue   { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+.pill-green  { background: rgba(0,255,157,0.1); color: var(--accent2); border: 1px solid rgba(0,255,157,0.2); }
+.pill-purple { background: rgba(167,139,250,0.1); color: var(--lldp); border: 1px solid rgba(167,139,250,0.2); }
+.pill-orange { background: rgba(251,146,60,0.1); color: var(--cdp); border: 1px solid rgba(251,146,60,0.2); }
 
-        #scanOverlay {
-            position: absolute; inset: 0;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center; gap: 1.2rem;
-            background: rgba(7,11,18,0.92); z-index: 50;
-        }
+/* ── TOPOLOGY PANEL (right sidebar) ── */
+#topoPanel {
+    position: absolute; top: 0; left: 0;
+    width: 300px; height: 100%;
+    background: var(--surface); border-right: 1px solid var(--border);
+    z-index: 100; transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    display: flex; flex-direction: column;
+}
+#topoPanel.open { transform: translateX(0); }
 
-        .scan-ring {
-            width: 72px; height: 72px;
-            border: 2px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
+/* ── SNMP MODAL ── */
+#snmpModal {
+    position: fixed; inset: 0;
+    background: rgba(7,11,18,0.88);
+    display: none; align-items: center; justify-content: center;
+    z-index: 600; backdrop-filter: blur(4px);
+}
+#snmpModal.open { display: flex; }
+#snmpBox {
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 6px; width: 420px; padding: 1.8rem;
+    box-shadow: 0 0 40px rgba(0,212,255,0.12);
+    display: flex; flex-direction: column; gap: 1rem;
+}
+.modal-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem; letter-spacing: 3px;
+    color: var(--accent); text-transform: uppercase;
+}
+.snmp-entry-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+.snmp-entry {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 0.4rem 0.6rem;
+    font-family: 'Share Tech Mono', monospace; font-size: 0.68rem; color: var(--text);
+}
+.snmp-entry .snmp-ip   { color: var(--accent); }
+.snmp-entry .snmp-port { color: var(--text-dim); }
+.btn-snmp-del {
+    background: transparent; border: none; color: var(--danger);
+    cursor: pointer; font-size: 0.75rem; padding: 0 0.25rem;
+}
+.modal-actions { display: flex; gap: 0.6rem; }
 
-        .scan-label {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.8rem; letter-spacing: 3px; color: var(--accent);
-        }
-        .scan-sub {
-            font-size: 0.72rem; color: var(--text-dim);
-            font-family: 'Share Tech Mono', monospace;
-        }
+/* ── TOPOLOGY PROGRESS ── */
+#topoProgressBar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: none; padding: 0.5rem 1rem;
+    background: var(--surface); border-top: 1px solid var(--border);
+    z-index: 50;
+}
+#topoProgressBar.show { display: flex; flex-direction: column; gap: 4px; }
+.topo-progress-track {
+    height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.topo-progress-fill {
+    height: 100%; background: var(--lldp);
+    border-radius: 2px; width: 0%; transition: width 0.4s ease;
+}
+.topo-phase-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem; color: var(--text-dim); letter-spacing: 1px;
+}
 
-        .node {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            cursor: pointer; z-index: 10;
-            user-select: none;
-        }
+/* ── UPDATE MODAL ── */
+#updateOverlay {
+    position: fixed; inset: 0; background: rgba(7,11,18,0.85);
+    display: none; align-items: center; justify-content: center;
+    z-index: 500; backdrop-filter: blur(4px);
+}
+#updateOverlay.open { display: flex; }
+#updateModal {
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 6px; width: 420px; padding: 1.8rem;
+    box-shadow: 0 0 40px rgba(0,212,255,0.15);
+    display: flex; flex-direction: column; gap: 1rem;
+}
+.update-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem; letter-spacing: 3px; color: var(--accent); text-transform: uppercase;
+}
+.update-versions { display: flex; gap: 1rem; align-items: center; font-family: 'Share Tech Mono', monospace; font-size: 0.78rem; }
+.ver-tag { padding: 0.25rem 0.6rem; border-radius: 3px; font-size: 0.7rem; }
+.ver-tag.old { background: rgba(255,69,96,0.1); border: 1px solid rgba(255,69,96,0.3); color: var(--danger); }
+.ver-tag.new { background: rgba(0,255,157,0.1); border: 1px solid rgba(0,255,157,0.3); color: var(--accent2); }
+.ver-arrow { color: var(--text-dim); }
+.update-notes {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem; color: var(--text);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 0.75rem; max-height: 120px; overflow-y: auto;
+    white-space: pre-wrap; line-height: 1.6;
+}
+.update-progress-wrap { display: none; flex-direction: column; gap: 0.5rem; }
+.update-progress-wrap.show { display: flex; }
+.progress-bar-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--accent2); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
+.progress-label { font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; color: var(--text-dim); letter-spacing: 1px; text-align: center; }
+.update-actions { display: flex; gap: 0.6rem; }
+.btn-update-confirm {
+    flex: 1; padding: 0.65rem; background: transparent;
+    border: 1px solid var(--accent2); color: var(--accent2);
+    font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
+    letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer; border-radius: 3px; transition: all 0.2s;
+}
+.btn-update-confirm:hover { background: var(--accent2); color: var(--bg); }
+.btn-update-confirm:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-update-skip {
+    padding: 0.65rem 1rem; background: transparent;
+    border: 1px solid var(--border); color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
+    cursor: pointer; border-radius: 3px; transition: all 0.2s;
+}
+.btn-update-skip:hover { border-color: var(--danger); color: var(--danger); }
 
-        .node-body {
-            display: flex; flex-direction: column;
-            align-items: center; gap: 4px;
-            transition: transform 0.15s;
-        }
-        .node:hover .node-body { transform: scale(1.1); }
+/* ── TOAST ── */
+#toast {
+    position: fixed; bottom: 1.5rem; left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--surface2); border: 1px solid var(--accent2);
+    color: var(--accent2); font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem; letter-spacing: 2px;
+    padding: 0.5rem 1.2rem; border-radius: 3px;
+    opacity: 0; transition: all 0.25s; z-index: 999; pointer-events: none;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        .node-icon {
-            width: 54px; height: 54px;
-            border-radius: 10px;
-            border: 1.5px solid var(--border);
-            background: var(--surface2);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.5rem;
-            transition: all 0.2s;
-            position: relative;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-        }
-
-        .node.selected .node-icon,
-        .node:hover .node-icon {
-            border-color: var(--accent);
-            box-shadow: 0 0 20px rgba(0,212,255,0.3), 0 4px 16px rgba(0,0,0,0.4);
-            background: rgba(0,212,255,0.08);
-        }
-
-        .node.randomized .node-icon { border-color: rgba(255,200,0,0.4); }
-        .node.randomized:hover .node-icon,
-        .node.randomized.selected .node-icon {
-            border-color: var(--warn);
-            box-shadow: 0 0 20px rgba(255,200,0,0.25), 0 4px 16px rgba(0,0,0,0.4);
-            background: rgba(255,200,0,0.06);
-        }
-
-        .node-ping {
-            position: absolute; top: -3px; right: -3px;
-            width: 9px; height: 9px; border-radius: 50%;
-            background: var(--accent2);
-            box-shadow: 0 0 6px var(--accent2);
-            border: 1.5px solid var(--bg);
-        }
-        .node-ping.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
-
-        .node-label {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.62rem; color: var(--bright);
-            text-align: center; max-width: 88px;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .node-ip {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.58rem; color: var(--accent);
-        }
-        .node-badge {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.55rem; letter-spacing: 1px;
-            padding: 0.1rem 0.4rem; border-radius: 2px;
-            background: rgba(255,200,0,0.12); color: var(--warn);
-            border: 1px solid rgba(255,200,0,0.25);
-        }
-
-        /* ── EDIT PANEL ── */
-        #editPanel {
-            position: absolute; top: 0; right: 0;
-            width: 320px; height: 100%;
-            background: var(--surface);
-            border-left: 1px solid var(--border);
-            z-index: 100;
-            transform: translateX(100%);
-            transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
-            display: flex; flex-direction: column;
-        }
-        #editPanel.open { transform: translateX(0); }
-
-        .panel-header {
-            padding: 1rem 1rem 0.8rem;
-            border-bottom: 1px solid var(--border);
-            display: flex; align-items: center;
-            justify-content: space-between; min-height: 48px;
-        }
-        .panel-title {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.65rem; letter-spacing: 3px;
-            color: var(--text-dim); text-transform: uppercase;
-        }
-        .btn-close {
-            background: transparent; border: none;
-            color: var(--text-dim); font-size: 1rem;
-            cursor: pointer; font-family: 'Share Tech Mono', monospace;
-            transition: color 0.2s; line-height: 1; padding: 0.2rem;
-        }
-        .btn-close:hover { color: var(--danger); }
-
-        .panel-body { padding: 1rem; flex: 1; overflow-y: auto; }
-
-        .device-header {
-            display: flex; align-items: center; gap: 0.75rem;
-            margin-bottom: 1rem; padding-bottom: 0.9rem;
-            border-bottom: 1px solid var(--border);
-        }
-        .device-icon-lg {
-            font-size: 1.8rem; width: 52px; height: 52px;
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 8px; display: flex; align-items: center;
-            justify-content: center; flex-shrink: 0;
-        }
-        .device-meta-ip {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.9rem; color: var(--accent);
-        }
-        .device-meta-vendor {
-            font-size: 0.75rem; color: var(--text-dim);
-            margin-top: 0.15rem; font-family: 'Share Tech Mono', monospace;
-        }
-        .device-meta-warn {
-            display: inline-block; margin-top: 0.3rem;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.6rem; letter-spacing: 1px;
-            padding: 0.15rem 0.5rem; border-radius: 2px;
-            background: rgba(255,200,0,0.1); color: var(--warn);
-            border: 1px solid rgba(255,200,0,0.3);
-        }
-
-        .form-group { margin-bottom: 0.8rem; }
-
-        label {
-            display: block; font-size: 0.62rem; letter-spacing: 2px;
-            text-transform: uppercase; color: var(--text-dim);
-            margin-bottom: 0.3rem; font-family: 'Share Tech Mono', monospace;
-        }
-
-        input, select, textarea {
-            width: 100%; background: var(--surface2);
-            border: 1px solid var(--border); color: var(--bright);
-            padding: 0.5rem 0.65rem;
-            font-family: 'Share Tech Mono', monospace; font-size: 0.78rem;
-            outline: none; transition: border-color 0.2s, box-shadow 0.2s;
-            border-radius: 3px;
-        }
-        input:focus, select:focus, textarea:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px rgba(0,212,255,0.08);
-        }
-        select option { background: var(--surface2); }
-        textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-
-        .panel-footer {
-            padding: 0.8rem 1rem; border-top: 1px solid var(--border);
-            display: flex; gap: 0.5rem;
-        }
-        .btn-save {
-            flex: 1; padding: 0.6rem; background: transparent;
-            border: 1px solid var(--accent); color: var(--accent);
-            font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
-            letter-spacing: 2px; text-transform: uppercase;
-            cursor: pointer; transition: all 0.2s; border-radius: 3px;
-        }
-        .btn-save:hover { background: var(--accent); color: var(--bg); }
-        .btn-del {
-            padding: 0.6rem 0.8rem; background: transparent;
-            border: 1px solid rgba(255,69,96,0.35); color: var(--danger);
-            font-family: 'Share Tech Mono', monospace; font-size: 0.7rem;
-            cursor: pointer; transition: all 0.2s; border-radius: 3px;
-        }
-        .btn-del:hover { background: var(--danger); color: white; }
-
-        #toast {
-            position: fixed; bottom: 1.5rem; left: 50%;
-            transform: translateX(-50%) translateY(16px);
-            background: var(--surface2); border: 1px solid var(--accent2);
-            color: var(--accent2); font-family: 'Share Tech Mono', monospace;
-            font-size: 0.72rem; letter-spacing: 2px;
-            padding: 0.5rem 1.2rem; border-radius: 3px;
-            opacity: 0; transition: all 0.25s; z-index: 999; pointer-events: none;
-        }
-        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-        #emptyState {
-            position: absolute; inset: 0; display: none;
-            flex-direction: column; align-items: center; justify-content: center;
-            gap: 0.6rem; color: var(--text-dim);
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.75rem; letter-spacing: 2px;
-        }
-
-        /* ── UPDATE MODAL ── */
-        #updateOverlay {
-            position: fixed; inset: 0;
-            background: rgba(7,11,18,0.85);
-            display: none; align-items: center; justify-content: center;
-            z-index: 500; backdrop-filter: blur(4px);
-        }
-        #updateOverlay.open { display: flex; }
-
-        #updateModal {
-            background: var(--surface);
-            border: 1px solid var(--accent);
-            border-radius: 6px;
-            width: 420px; padding: 1.8rem;
-            box-shadow: 0 0 40px rgba(0,212,255,0.15);
-            display: flex; flex-direction: column; gap: 1rem;
-        }
-
-        .update-title {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.75rem; letter-spacing: 3px;
-            color: var(--accent); text-transform: uppercase;
-        }
-        .update-versions {
-            display: flex; gap: 1rem; align-items: center;
-            font-family: 'Share Tech Mono', monospace; font-size: 0.78rem;
-        }
-        .ver-tag {
-            padding: 0.25rem 0.6rem; border-radius: 3px; font-size: 0.7rem;
-        }
-        .ver-tag.old { background: rgba(255,69,96,0.1); border: 1px solid rgba(255,69,96,0.3); color: var(--danger); }
-        .ver-tag.new { background: rgba(0,255,157,0.1); border: 1px solid rgba(0,255,157,0.3); color: var(--accent2); }
-        .ver-arrow { color: var(--text-dim); }
-
-        .update-notes {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.68rem; color: var(--text);
-            background: var(--surface2); border: 1px solid var(--border);
-            border-radius: 3px; padding: 0.75rem;
-            max-height: 120px; overflow-y: auto;
-            white-space: pre-wrap; line-height: 1.6;
-        }
-
-        .update-progress-wrap {
-            display: none; flex-direction: column; gap: 0.5rem;
-        }
-        .update-progress-wrap.show { display: flex; }
-        .progress-bar-track {
-            height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
-        }
-        .progress-bar-fill {
-            height: 100%; background: var(--accent2);
-            border-radius: 2px; width: 0%;
-            transition: width 0.3s ease;
-        }
-        .progress-label {
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 0.65rem; color: var(--text-dim);
-            letter-spacing: 1px; text-align: center;
-        }
-
-        .update-actions { display: flex; gap: 0.6rem; }
-        .btn-update-confirm {
-            flex: 1; padding: 0.65rem;
-            background: transparent; border: 1px solid var(--accent2);
-            color: var(--accent2); font-family: 'Share Tech Mono', monospace;
-            font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase;
-            cursor: pointer; border-radius: 3px; transition: all 0.2s;
-        }
-        .btn-update-confirm:hover { background: var(--accent2); color: var(--bg); }
-        .btn-update-confirm:disabled { opacity: 0.3; cursor: not-allowed; }
-        .btn-update-skip {
-            padding: 0.65rem 1rem;
-            background: transparent; border: 1px solid var(--border);
-            color: var(--text-dim); font-family: 'Share Tech Mono', monospace;
-            font-size: 0.7rem; cursor: pointer; border-radius: 3px; transition: all 0.2s;
-        }
-        .btn-update-skip:hover { border-color: var(--danger); color: var(--danger); }
-    </style>
+/* ── TOPOLOGY OPTIONS BAR ── */
+.topo-opts-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem 1rem;
+    padding: 0.35rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(7,11,18,0.92);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem; color: var(--text-dim);
+    flex-shrink: 0;
+}
+.topo-opts-label { letter-spacing: 1px; margin-right: 0.25rem; color: var(--text); }
+.topo-opt { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none; }
+.topo-opt input { accent-color: var(--accent2); width: 12px; height: 12px; }
+.legend-enrich {
+    margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border);
+    font-size: 0.58rem; color: var(--text-dim); line-height: 1.3;
+}
+</style>
 </head>
 <body>
 
 <header>
     <div class="logo"><div class="logo-dot"></div>NETTRACK</div>
+    <div class="toolbar">
+        <button class="btn btn-accent" id="rescanBtn" onclick="runScan()">⟳ Rescan</button>
+        <button class="btn btn-primary" id="topoBtn" onclick="runTopology()">⬡ Map Topology</button>
+        <button class="btn btn-dim" onclick="openSnmpModal()">⚙ SNMP</button>
+    </div>
     <div class="header-stats">
         <div class="stat">SUBNET <span id="hSubnet">—</span></div>
         <div class="stat">DEVICES <span id="hCount">—</span></div>
         <div class="stat">RANDOMIZED <span class="warn" id="hRandom">—</span></div>
+        <div class="stat">TOPO <span class="purple" id="hTopo">—</span></div>
         <div class="stat">VERSION <span id="hVersion">—</span></div>
     </div>
-    <button class="btn-rescan" id="rescanBtn" onclick="runScan()">⟳ Rescan</button>
 </header>
 
 <!-- Update Modal -->
@@ -407,9 +519,7 @@
         </div>
         <div class="update-notes" id="u-notes"></div>
         <div class="update-progress-wrap" id="u-progress-wrap">
-            <div class="progress-bar-track">
-                <div class="progress-bar-fill" id="u-bar"></div>
-            </div>
+            <div class="progress-bar-track"><div class="progress-bar-fill" id="u-bar"></div></div>
             <div class="progress-label" id="u-progress-label">Downloading...</div>
         </div>
         <div class="update-actions">
@@ -419,13 +529,65 @@
     </div>
 </div>
 
+<!-- SNMP Modal -->
+<div id="snmpModal">
+    <div id="snmpBox">
+        <div class="modal-title">⚙ SNMP Configuration</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:var(--text-dim);line-height:1.6">
+            Configure SNMP v2c community strings for managed switches.<br>
+            Use <span style="color:var(--accent)">*</span> as IP for a global fallback.<br>
+            Community strings are stored locally and never transmitted.
+        </div>
+        <div class="snmp-entry-list" id="snmpEntryList"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:0.5rem">
+            <div class="form-group" style="margin:0">
+                <label>IP / *</label>
+                <input type="text" id="snmp-ip" placeholder="192.168.1.1 or *">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label>Community</label>
+                <input type="password" id="snmp-community" placeholder="public">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label>Port</label>
+                <input type="number" id="snmp-port" value="161" min="1" max="65535">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" style="flex:1" onclick="addSnmpEntry()">Add Entry</button>
+            <button class="btn btn-dim" onclick="closeSnmpModal()">Close</button>
+        </div>
+    </div>
+</div>
+
 <div id="mapWrap">
     <canvas id="mapCanvas"></canvas>
 
+    <!-- View toggle -->
+    <div class="view-toggle">
+        <button class="btn-view active" id="viewStar"  onclick="setView('star')">Star</button>
+        <button class="btn-view"        id="viewTree"  onclick="setView('tree')">Tree</button>
+        <button class="btn-view"        id="viewForce" onclick="setView('force')">Force</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend" id="legendBox" style="display:none">
+        <div class="legend-item"><div class="legend-line" style="background:var(--lldp)"></div>LLDP</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--cdp)"></div>CDP</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--accent);opacity:0.5"></div>L3 Hop</div>
+        <div class="legend-item"><div class="legend-line" style="background:var(--inferred);border:1px dashed var(--border)"></div>Inferred</div>
+        <div class="legend-enrich" id="legendEnrich" style="display:none"></div>
+    </div>
+
     <div id="scanOverlay">
         <div class="scan-ring"></div>
-        <div class="scan-label">Scanning Network</div>
-        <div class="scan-sub">ARP + ping sweep in progress...</div>
+        <div class="scan-label" id="scanLabel">Scanning Network</div>
+        <div class="scan-sub"   id="scanSub">ARP + ping sweep in progress...</div>
+        <div class="scan-progress-wrap" id="scanProgressWrap" style="display:none">
+            <div class="scan-progress-track">
+                <div class="scan-progress-fill" id="scanProgressFill"></div>
+            </div>
+        </div>
     </div>
 
     <div id="emptyState">
@@ -433,6 +595,7 @@
         <div style="font-size:0.65rem">Try rescanning</div>
     </div>
 
+    <!-- Edit panel (right) -->
     <div id="editPanel">
         <div class="panel-header">
             <div class="panel-title">Device Details</div>
@@ -442,14 +605,17 @@
             <div class="device-header">
                 <div class="device-icon-lg" id="p-icon">📡</div>
                 <div>
-                    <div class="device-meta-ip" id="p-ip-display">—</div>
+                    <div class="device-meta-ip"    id="p-ip-display">—</div>
                     <div class="device-meta-vendor" id="p-vendor-display">—</div>
-                    <div class="device-meta-warn" id="p-rand-badge" style="display:none">
-                        ⚠ RANDOMIZED MAC — ENDPOINT
-                    </div>
+                    <div class="device-meta-warn"  id="p-rand-badge" style="display:none">⚠ RANDOMIZED MAC</div>
                 </div>
             </div>
-            <div class="form-group">
+            <!-- Auto-discovered enrichment -->
+            <div class="enrichment-section" id="enrichSection" style="display:none">
+                <div class="enrichment-label">Discovered</div>
+                <div class="pill-list" id="enrichPills"></div>
+            </div>
+            <div class="form-group" style="margin-top:0.8rem">
                 <label>Device Name</label>
                 <input type="text" id="p-name" placeholder="SW1, R-Core, AP-Floor2...">
             </div>
@@ -501,17 +667,27 @@
             <button class="btn-del"  onclick="deleteDevice()">Delete</button>
         </div>
     </div>
+
+    <!-- Topology progress bar (bottom) -->
+    <div id="topoProgressBar">
+        <div class="topo-phase-label" id="topoPhaseLabel">TOPOLOGY: idle</div>
+        <div class="topo-progress-track">
+            <div class="topo-progress-fill" id="topoProgressFill"></div>
+        </div>
+    </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
+// ── STATE ────────────────────────────────────────────────────────────────────
 let devices     = [];
 let nodes       = [];
+let topoEdges   = [];
 let selectedIdx = null;
-let dragNode    = null;
-let dragOffX    = 0, dragOffY = 0;
-let dragMoved   = false;
+let dragNode    = null, dragOffX = 0, dragOffY = 0, dragMoved = false;
+let currentView = 'star';    // 'star' | 'tree' | 'force'
+let forceAnim   = null;
 
 const ICONS = {
     router:   '🌐',
@@ -529,69 +705,309 @@ const ICONS = {
     other:    '📡'
 };
 
-// ── MAC UTILS ─────────────────────────────────────────────
+const INFRA_TYPES = new Set(['router','switch','ap','firewall','server']);
+
+// ── MAC UTILS ────────────────────────────────────────────────────────────────
 function isMacRandomized(mac) {
     if (!mac) return false;
     try {
-        const first = parseInt(mac.replace(/[^0-9a-fA-F]/g, '').substring(0, 2), 16);
+        const first = parseInt(mac.replace(/[^0-9a-fA-F]/g,'').substring(0,2), 16);
         return !!(first & 0x02);
     } catch { return false; }
 }
 
-function isNoiseDevice(device) {
-    // Filter out multicast, broadcast, and VMware virtual adapters
-    const ip  = device.ip  || '';
-    const mac = device.mac || '';
+function isNoiseDevice(d) {
+    const ip = d.ip || '', mac = d.mac || '';
     if (ip.startsWith('224.') || ip.startsWith('239.')) return true;
     if (ip.endsWith('.255')) return true;
     if (mac === 'FF:FF:FF:FF:FF:FF') return true;
-    if (mac.startsWith('01:00:5E')) return true; // IPv4 multicast
+    if (mac.startsWith('01:00:5E')) return true;
     return false;
 }
 
-// ── CANVAS ────────────────────────────────────────────────
+// ── CANVAS ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('mapCanvas');
 const ctx    = canvas.getContext('2d');
 
 function resizeCanvas() {
     canvas.width  = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
-    drawLines();
+    drawEdges();
 }
 
-function drawLines() {
+// ── EDGE COLOURS ─────────────────────────────────────────────────────────────
+const EDGE_STYLES = {
+    lldp:          { color: 'rgba(167,139,250,0.65)', width: 2, dash: [] },
+    lldp_passive:  { color: 'rgba(167,139,250,0.4)',  width: 1.5, dash: [4,6] },
+    cdp:           { color: 'rgba(251,146,60,0.65)',  width: 2, dash: [] },
+    l3_hop:        { color: 'rgba(0,212,255,0.35)',   width: 1.5, dash: [3,5] },
+    inferred_star: { color: 'rgba(26,40,64,0.9)',     width: 1.5, dash: [4,7] },
+};
+
+function edgeStyle(type, selected) {
+    const s = EDGE_STYLES[type] || EDGE_STYLES.inferred_star;
+    return {
+        color: selected ? s.color.replace(/[\d.]+\)$/, '0.9)') : s.color,
+        width: selected ? s.width + 0.5 : s.width,
+        dash:  s.dash,
+    };
+}
+
+function drawEdges() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (nodes.length < 2) return;
-    const gw = nodes.find(n => n.device.ip && n.device.ip.endsWith('.1')) || nodes[0];
-    nodes.forEach(n => {
-        if (n === gw) return;
-        const isSelected = selectedIdx !== null &&
-            (nodes[selectedIdx] === n || nodes[selectedIdx] === gw);
+
+    const selNode = selectedIdx !== null ? nodes[selectedIdx] : null;
+
+    topoEdges.forEach(edge => {
+        const srcNode = nodes.find(n => n.device.ip === edge.src);
+        const dstNode = nodes.find(n => n.device.ip === edge.dst);
+        if (!srcNode || !dstNode) return;
+
+        const selected = selNode &&
+            (nodes.indexOf(srcNode) === selectedIdx ||
+             nodes.indexOf(dstNode) === selectedIdx);
+
+        const s = edgeStyle(edge.type, selected);
         ctx.beginPath();
-        ctx.moveTo(gw.x, gw.y);
-        ctx.lineTo(n.x, n.y);
-        ctx.strokeStyle = isSelected
-            ? (n.device.randomized ? 'rgba(255,200,0,0.4)' : 'rgba(0,212,255,0.4)')
-            : 'rgba(26,40,64,0.8)';
-        ctx.lineWidth   = isSelected ? 2 : 1.5;
-        ctx.setLineDash([4, 7]);
+        ctx.moveTo(srcNode.x, srcNode.y);
+        ctx.lineTo(dstNode.x, dstNode.y);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth   = s.width;
+        ctx.setLineDash(s.dash);
         ctx.stroke();
         ctx.setLineDash([]);
     });
 }
 
-// ── NODES ─────────────────────────────────────────────────
+// If no topology edges loaded yet, draw simple star lines
+function drawStarFallback() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (nodes.length < 2) return;
+    const gw = nodes.find(n => n.device.ip?.endsWith('.1')) || nodes[0];
+    const selNode = selectedIdx !== null ? nodes[selectedIdx] : null;
+    nodes.forEach(n => {
+        if (n === gw) return;
+        const selected = selNode && (n === selNode || gw === selNode);
+        ctx.beginPath();
+        ctx.moveTo(gw.x, gw.y);
+        ctx.lineTo(n.x, n.y);
+        ctx.strokeStyle = selected
+            ? (n.device.randomized ? 'rgba(255,200,0,0.4)' : 'rgba(0,212,255,0.4)')
+            : 'rgba(26,40,64,0.8)';
+        ctx.lineWidth   = selected ? 2 : 1.5;
+        ctx.setLineDash([4,7]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    });
+}
+
+function drawLines() {
+    if (topoEdges.length > 0) {
+        drawEdges();
+    } else {
+        drawStarFallback();
+    }
+}
+
+// ── LAYOUT ENGINES ───────────────────────────────────────────────────────────
+function layoutStar(list) {
+    const wrap = document.getElementById('mapWrap');
+    const W = wrap.offsetWidth, H = wrap.offsetHeight;
+    const cx = W / 2, cy = H / 2;
+    const r  = Math.min(W, H) * 0.30;
+    nodes    = [];
+
+    list.forEach((device, i) => {
+        const isGW = device.ip?.endsWith('.1');
+        let x, y;
+        if (isGW) {
+            x = cx; y = cy;
+        } else {
+            const nonGW = list.filter(d => !d.ip?.endsWith('.1'));
+            const ni    = nonGW.indexOf(device);
+            const angle = (ni / nonGW.length) * Math.PI * 2 - Math.PI / 2;
+            x = cx + r * Math.cos(angle);
+            y = cy + r * Math.sin(angle);
+        }
+        const el = createNode(device, x, y, i);
+        nodes.push({ device, x, y, el });
+    });
+    drawLines();
+}
+
+function layoutTree(list) {
+    const wrap = document.getElementById('mapWrap');
+    const W = wrap.offsetWidth, H = wrap.offsetHeight;
+    nodes = [];
+
+    // Build adjacency from topoEdges
+    const adj = {};   // ip -> [child_ips]
+    const inDeg = {};
+    list.forEach(d => { adj[d.ip] = []; inDeg[d.ip] = 0; });
+
+    topoEdges.forEach(e => {
+        if (adj[e.src] !== undefined && adj[e.dst] !== undefined) {
+            if (!adj[e.src].includes(e.dst)) {
+                adj[e.src].push(e.dst);
+                inDeg[e.dst] = (inDeg[e.dst] || 0) + 1;
+            }
+        }
+    });
+
+    // Find root (gateway)
+    let root = list.find(d => d.ip?.endsWith('.1'))?.ip
+             || list.find(d => d.type === 'router')?.ip
+             || list[0]?.ip;
+
+    // BFS to assign layers
+    const layers = {};
+    const visited = new Set();
+    const queue = [[root, 0]];
+    while (queue.length) {
+        const [ip, depth] = queue.shift();
+        if (visited.has(ip)) continue;
+        visited.add(ip);
+        layers[ip] = depth;
+        (adj[ip] || []).forEach(c => queue.push([c, depth + 1]));
+    }
+    // Unvisited nodes go in layer 1 (connect to root visually)
+    list.forEach(d => {
+        if (layers[d.ip] === undefined) layers[d.ip] = 1;
+    });
+
+    const maxLayer = Math.max(...Object.values(layers));
+    const layerNodes = {};
+    list.forEach(d => {
+        const l = layers[d.ip];
+        (layerNodes[l] = layerNodes[l] || []).push(d.ip);
+    });
+
+    const positions = {};
+    const PADDING_X = 80, PADDING_Y = 80;
+    for (let l = 0; l <= maxLayer; l++) {
+        const ips    = layerNodes[l] || [];
+        const count  = ips.length;
+        const y      = PADDING_Y + (l / Math.max(maxLayer, 1)) * (H - PADDING_Y * 2);
+        ips.forEach((ip, i) => {
+            const x = PADDING_X + ((i + 0.5) / count) * (W - PADDING_X * 2);
+            positions[ip] = { x, y };
+        });
+    }
+
+    list.forEach((device, i) => {
+        const pos = positions[device.ip] || { x: W/2, y: H/2 };
+        const el  = createNode(device, pos.x, pos.y, i);
+        nodes.push({ device, x: pos.x, y: pos.y, el });
+    });
+    drawLines();
+}
+
+function layoutForce(list) {
+    const wrap = document.getElementById('mapWrap');
+    const W = wrap.offsetWidth, H = wrap.offsetHeight;
+    nodes = [];
+
+    // Start positions in star, then let force simulation settle
+    const cx = W / 2, cy = H / 2;
+    const r  = Math.min(W, H) * 0.28;
+
+    list.forEach((device, i) => {
+        const isGW = device.ip?.endsWith('.1');
+        let x = isGW ? cx : cx + r * Math.cos((i / list.length) * Math.PI * 2);
+        let y = isGW ? cy : cy + r * Math.sin((i / list.length) * Math.PI * 2);
+        const el = createNode(device, x, y, i);
+        nodes.push({ device, x, y, el, vx: 0, vy: 0 });
+    });
+
+    // Build adjacency for edge forces
+    const edgeSet = topoEdges.length > 0 ? topoEdges : nodes.slice(1).map(n => ({
+        src: nodes[0].device.ip, dst: n.device.ip }));
+
+    if (forceAnim) cancelAnimationFrame(forceAnim);
+    let tick = 0;
+    const MAX_TICKS = 300;
+
+    function step() {
+        if (tick++ > MAX_TICKS || dragNode) { drawLines(); return; }
+
+        const REPEL  = 3500;
+        const SPRING = 0.015;
+        const REST   = 140;
+        const DAMP   = 0.82;
+
+        nodes.forEach((a, i) => {
+            let fx = 0, fy = 0;
+            // Repulsion
+            nodes.forEach((b, j) => {
+                if (i === j) return;
+                const dx = a.x - b.x || 0.01;
+                const dy = a.y - b.y || 0.01;
+                const d2 = dx*dx + dy*dy + 1;
+                fx += REPEL * dx / d2;
+                fy += REPEL * dy / d2;
+            });
+            // Spring (edges)
+            edgeSet.forEach(e => {
+                let other = null;
+                if (e.src === a.device.ip) other = nodes.find(n => n.device.ip === e.dst);
+                if (e.dst === a.device.ip) other = nodes.find(n => n.device.ip === e.src);
+                if (!other) return;
+                const dx = other.x - a.x;
+                const dy = other.y - a.y;
+                const d  = Math.sqrt(dx*dx + dy*dy) || 1;
+                fx += SPRING * (d - REST) * dx / d;
+                fy += SPRING * (d - REST) * dy / d;
+            });
+            // Centre gravity
+            fx += (W/2 - a.x) * 0.003;
+            fy += (H/2 - a.y) * 0.003;
+
+            a.vx = (a.vx + fx) * DAMP;
+            a.vy = (a.vy + fy) * DAMP;
+            a.x  = Math.max(40, Math.min(W-40, a.x + a.vx));
+            a.y  = Math.max(40, Math.min(H-40, a.y + a.vy));
+            a.el.style.left = a.x + 'px';
+            a.el.style.top  = a.y + 'px';
+        });
+        drawLines();
+        forceAnim = requestAnimationFrame(step);
+    }
+    step();
+}
+
+function layoutNodes(list) {
+    nodes.forEach(n => n.el.remove());
+    nodes = [];
+    if (currentView === 'tree')  return layoutTree(list);
+    if (currentView === 'force') return layoutForce(list);
+    return layoutStar(list);
+}
+
+function setView(v) {
+    currentView = v;
+    document.querySelectorAll('.btn-view').forEach(b => b.classList.remove('active'));
+    document.getElementById('view' + v.charAt(0).toUpperCase() + v.slice(1))?.classList.add('active');
+    if (devices.length > 0) layoutNodes(devices);
+}
+
+// ── NODE CREATION ─────────────────────────────────────────────────────────────
 function createNode(device, x, y, index) {
     const wrap       = document.getElementById('mapWrap');
     const randomized = isMacRandomized(device.mac);
+    const isInfra    = INFRA_TYPES.has(device.type);
     const el         = document.createElement('div');
-    el.className     = 'node' + (randomized ? ' randomized' : '');
+    let cls = 'node';
+    if (randomized) cls += ' randomized';
+    if (isInfra)    cls += ' infra';
+    el.className     = cls;
     el.style.left    = x + 'px';
     el.style.top     = y + 'px';
     el.dataset.index = index;
 
     const pingClass = randomized ? 'node-ping warn' : 'node-ping';
     const label     = device.name || device.hostname || (randomized ? 'endpoint' : '—');
+    const services  = (device.mdns_services || []).slice(0, 3).join(' · ');
 
     el.innerHTML = `
         <div class="node-body">
@@ -601,7 +1017,8 @@ function createNode(device, x, y, index) {
             </div>
             <div class="node-label">${label}</div>
             <div class="node-ip">${device.ip || ''}</div>
-            ${randomized ? '<div class="node-badge">ENDPOINT</div>' : ''}
+            ${randomized ? '<div class="node-badge">RAND</div>' : ''}
+            ${services   ? `<div class="node-services">${services}</div>` : ''}
         </div>`;
 
     el.addEventListener('mousedown', e => {
@@ -609,12 +1026,10 @@ function createNode(device, x, y, index) {
         dragMoved = false;
         const rect     = el.getBoundingClientRect();
         const wrapRect = wrap.getBoundingClientRect();
-        dragOffX = e.clientX - (rect.left + rect.width / 2  - wrapRect.left);
-        dragOffY = e.clientY - (rect.top  + rect.height / 2 - wrapRect.top);
-        e.stopPropagation();
-        e.preventDefault();
+        dragOffX = e.clientX - (rect.left + rect.width/2  - wrapRect.left);
+        dragOffY = e.clientY - (rect.top  + rect.height/2 - wrapRect.top);
+        e.stopPropagation(); e.preventDefault();
     });
-
     wrap.appendChild(el);
     return el;
 }
@@ -625,18 +1040,17 @@ document.getElementById('mapWrap').addEventListener('mousemove', e => {
     const wrapRect = document.getElementById('mapWrap').getBoundingClientRect();
     const x = e.clientX - wrapRect.left - dragOffX;
     const y = e.clientY - wrapRect.top  - dragOffY;
-    dragNode.el.style.left    = x + 'px';
-    dragNode.el.style.top     = y + 'px';
-    nodes[dragNode.index].x   = x;
-    nodes[dragNode.index].y   = y;
+    dragNode.el.style.left  = x + 'px';
+    dragNode.el.style.top   = y + 'px';
+    nodes[dragNode.index].x = x;
+    nodes[dragNode.index].y = y;
     drawLines();
 });
 
 document.getElementById('mapWrap').addEventListener('mouseup', () => {
     if (!dragNode) return;
     if (!dragMoved) selectNode(dragNode.index);
-    dragNode  = null;
-    dragMoved = false;
+    dragNode = null; dragMoved = false;
 });
 
 document.getElementById('mapWrap').addEventListener('mousedown', e => {
@@ -645,33 +1059,7 @@ document.getElementById('mapWrap').addEventListener('mousedown', e => {
     }
 });
 
-function layoutNodes(list) {
-    const wrap = document.getElementById('mapWrap');
-    const W = wrap.offsetWidth, H = wrap.offsetHeight;
-    const cx = W / 2, cy = H / 2;
-    const r  = Math.min(W, H) * 0.30;
-    nodes    = [];
-
-    list.forEach((device, i) => {
-        const isGW = device.ip && device.ip.endsWith('.1');
-        let x, y;
-        if (isGW) {
-            x = cx; y = cy;
-        } else {
-            const nonGW = list.filter(d => !(d.ip && d.ip.endsWith('.1')));
-            const ni    = nonGW.indexOf(device);
-            const angle = (ni / nonGW.length) * Math.PI * 2 - Math.PI / 2;
-            x = cx + r * Math.cos(angle);
-            y = cy + r * Math.sin(angle);
-        }
-        const el = createNode(device, x, y, i);
-        nodes.push({ device, x, y, el });
-    });
-
-    drawLines();
-}
-
-// ── PANEL ─────────────────────────────────────────────────
+// ── PANEL ─────────────────────────────────────────────────────────────────────
 function selectNode(index) {
     if (selectedIdx !== null && nodes[selectedIdx]) {
         nodes[selectedIdx].el.classList.remove('selected');
@@ -696,6 +1084,31 @@ function selectNode(index) {
     document.getElementById('p-vendor').value = d.vendor || '';
     document.getElementById('p-room').value   = d.room   || '';
     document.getElementById('p-notes').value  = d.notes  || '';
+
+    // Enrichment pills
+    const pills   = [];
+    const section = document.getElementById('enrichSection');
+    const pillBox = document.getElementById('enrichPills');
+    pillBox.innerHTML = '';
+
+    if (d.opt55_os) pills.push({ label: d.opt55_os, cls: 'pill-green' });
+    if (d.ssdp_server) pills.push({ label: d.ssdp_server.substring(0,30), cls: 'pill-orange' });
+    (d.mdns_services || []).forEach(s => pills.push({ label: s, cls: 'pill-blue' }));
+    (d.open_ports || []).forEach(p => pills.push({ label: String(p), cls: 'pill-purple' }));
+    if (d.sysinfo?.sysName) pills.push({ label: 'SNMP: ' + d.sysinfo.sysName, cls: 'pill-purple' });
+
+    if (pills.length > 0) {
+        pills.forEach(p => {
+            const el = document.createElement('span');
+            el.className = 'pill ' + p.cls;
+            el.textContent = p.label;
+            pillBox.appendChild(el);
+        });
+        section.style.display = 'block';
+    } else {
+        section.style.display = 'none';
+    }
+
     document.getElementById('editPanel').classList.add('open');
 }
 
@@ -712,13 +1125,13 @@ function updateNodeIcon() {
     if (selectedIdx === null) return;
     const type      = document.getElementById('p-type').value;
     const randomized = isMacRandomized(nodes[selectedIdx].device.mac);
-    const pingClass = randomized ? 'node-ping warn' : 'node-ping';
-    const iconEl    = nodes[selectedIdx].el.querySelector('.node-icon');
+    const pingClass  = randomized ? 'node-ping warn' : 'node-ping';
+    const iconEl     = nodes[selectedIdx].el.querySelector('.node-icon');
     iconEl.innerHTML = (ICONS[type] || '📡') + `<div class="${pingClass}"></div>`;
     document.getElementById('p-icon').textContent = ICONS[type] || '📡';
 }
 
-// ── SAVE / DELETE ─────────────────────────────────────────
+// ── SAVE / DELETE ──────────────────────────────────────────────────────────────
 async function saveDevice() {
     if (selectedIdx === null) return;
     const updated = {
@@ -731,13 +1144,11 @@ async function saveDevice() {
         room:   document.getElementById('p-room').value,
         notes:  document.getElementById('p-notes').value,
     };
-
     const res = await fetch('/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mac: updated.mac || null, device: updated })
     });
-
     if (res.ok) {
         devices[selectedIdx]      = updated;
         nodes[selectedIdx].device = updated;
@@ -755,18 +1166,12 @@ async function deleteDevice() {
     if (selectedIdx === null) return;
     const d = nodes[selectedIdx].device;
     if (!confirm(`Remove ${d.ip} from inventory?`)) return;
-
     const res = await fetch('/delete-device', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mac: d.mac || null, ip: d.ip })
     });
-
-    if (!res.ok) {
-        toast('✗ Delete failed');
-        return;
-    }
-
+    if (!res.ok) { toast('✗ Delete failed'); return; }
     nodes[selectedIdx].el.remove();
     devices.splice(selectedIdx, 1);
     nodes.splice(selectedIdx, 1);
@@ -777,7 +1182,7 @@ async function deleteDevice() {
     toast('Removed');
 }
 
-// ── TOAST ─────────────────────────────────────────────────
+// ── TOAST ─────────────────────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg) {
     const el = document.getElementById('toast');
@@ -787,43 +1192,84 @@ function toast(msg) {
     toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
-// ── SCAN ──────────────────────────────────────────────────
+// ── SCAN ──────────────────────────────────────────────────────────────────────
 async function runScan() {
     const overlay = document.getElementById('scanOverlay');
     const btn     = document.getElementById('rescanBtn');
-
+    document.getElementById('scanLabel').textContent = 'Scanning Network';
+    document.getElementById('scanSub').textContent   = 'ARP + ping sweep in progress...';
+    document.getElementById('scanProgressWrap').style.display = 'none';
     overlay.style.display = 'flex';
     btn.disabled = true;
     nodes.forEach(n => n.el.remove());
-    nodes = [];
+    nodes = []; topoEdges = [];
     closePanel();
 
-    const [scanRes, savedRes] = await Promise.all([fetch('/scan'), fetch('/devices')]);
+    const [scanRes, savedRes, topoRes] = await Promise.all([
+        fetch('/scan'), fetch('/devices'), fetch('/topology')
+    ]);
     const scanData  = await scanRes.json();
     const savedData = await savedRes.json();
+    const topoData  = await topoRes.json();
 
-    // Filter out noise (multicast, VMware, broadcast)
     const cleanDevices = scanData.devices.filter(d => !isNoiseDevice(d));
-
-    // Re-derive randomized flag on frontend from MAC
     const tagged = cleanDevices.map(d => ({
-        ...d,
-        randomized: isMacRandomized(d.mac)
+        ...d, randomized: isMacRandomized(d.mac)
     }));
 
     document.getElementById('hSubnet').textContent  = scanData.subnet + '.0/24';
     document.getElementById('hCount').textContent   = tagged.length;
     document.getElementById('hRandom').textContent  = tagged.filter(d => d.randomized).length;
 
-    // Merge with saved data — MAC is primary key, IP is fallback
+    // Load topology edges
+    const legendEnrich = document.getElementById('legendEnrich');
+    if (topoData.edges?.length > 0) {
+        topoEdges = topoData.edges;
+        document.getElementById('legendBox').style.display = 'flex';
+        const meta = topoData.meta || {};
+        const methods = [];
+        if (meta.has_lldp)       methods.push('LLDP');
+        if (meta.has_snmp)       methods.push('SNMP');
+        if (meta.has_traceroute) methods.push('L3');
+        if (meta.has_mdns)       methods.push('mDNS');
+        if (meta.has_ssdp)       methods.push('SSDP');
+        if (meta.has_dhcp_fp)    methods.push('DHCP');
+        document.getElementById('hTopo').textContent = methods.length
+            ? methods.join('+') : 'inferred';
+        const enrich = [];
+        if (meta.has_ssdp)    enrich.push('SSDP');
+        if (meta.has_dhcp_fp) enrich.push('DHCP FP');
+        if (meta.has_mdns)    enrich.push('mDNS');
+        if (enrich.length) {
+            legendEnrich.textContent = 'ENRICH: ' + enrich.join(' · ');
+            legendEnrich.style.display = 'block';
+        } else {
+            legendEnrich.style.display = 'none';
+        }
+    } else {
+        document.getElementById('hTopo').textContent = '—';
+        document.getElementById('legendBox').style.display = 'none';
+        legendEnrich.style.display = 'none';
+    }
+
+    // Merge saved + topology enrichment
     devices = tagged.map(scanned => {
         const saved = savedData.find(s =>
             (scanned.mac && s.mac === scanned.mac) ||
             (!scanned.mac && s.ip === scanned.ip)
         );
-        return saved
+        const topoNode = (topoData.nodes || []).find(n => n.ip === scanned.ip);
+        const base = saved
             ? { ...scanned, ...saved, ip: scanned.ip, randomized: scanned.randomized }
             : { ...scanned, type: 'other', name: '', room: '', notes: '' };
+        if (topoNode) {
+            // Merge enrichment fields (don't overwrite user edits)
+            for (const f of ['mdns_services','ssdp_server','opt55_os','open_ports','sysinfo']) {
+                if (topoNode[f] && !base[f]) base[f] = topoNode[f];
+            }
+            if (base.type === 'other' && topoNode.type !== 'other') base.type = topoNode.type;
+        }
+        return base;
     });
 
     if (devices.length === 0) {
@@ -843,25 +1289,167 @@ async function runScan() {
     btn.disabled = false;
 }
 
-window.addEventListener('resize', resizeCanvas);
-window.addEventListener('load',   () => { resizeCanvas(); runScan(); checkForUpdate(); });
+// ── TOPOLOGY DISCOVERY ────────────────────────────────────────────────────────
+let _topoPoller = null;
 
-// ── AUTO UPDATE ───────────────────────────────────────────
-let _updateExeUrl = null;
-let _pollTimer    = null;
-let _updateToken  = null;
+async function runTopology() {
+    const btn = document.getElementById('topoBtn');
+    btn.disabled = true;
+
+    const res = await fetch('/run-topology', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ options: {
+            traceroute: document.getElementById('optTraceroute').checked,
+            snmp:       document.getElementById('optSnmp').checked,
+            passive:    document.getElementById('optPassive').checked,
+            mdns:       document.getElementById('optMdns').checked,
+            ssdp:       document.getElementById('optSsdp').checked,
+            netbios:    document.getElementById('optNetbios').checked,
+            banners:    document.getElementById('optBanners').checked,
+        }})
+    });
+
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast('✗ ' + (data.error || 'Topology failed'));
+        btn.disabled = false;
+        return;
+    }
+
+    toast('⬡ Topology discovery started');
+    document.getElementById('topoProgressBar').classList.add('show');
+
+    if (_topoPoller) clearInterval(_topoPoller);
+    _topoPoller = setInterval(pollTopoStatus, 1500);
+}
+
+async function pollTopoStatus() {
+    try {
+        const res  = await fetch('/topology-status');
+        const data = await res.json();
+        const fill  = document.getElementById('topoProgressFill');
+        const label = document.getElementById('topoPhaseLabel');
+        const btn   = document.getElementById('topoBtn');
+
+        fill.style.width = data.progress + '%';
+
+        const phaseNames = {
+            init:         'Initializing',
+            traceroute:   'Phase 1: Traceroute',
+            snmp:         'Phase 2: SNMP',
+            passive_sniff:'Phase 3: Passive Sniff (LLDP+DHCP)',
+            mdns:         'Enrichment: mDNS/Bonjour',
+            ssdp:         'Enrichment: SSDP/UPnP',
+            netbios:      'Enrichment: NetBIOS',
+            fingerprint:  'Enrichment: Port Fingerprint',
+            build_graph:  'Building topology graph',
+        };
+        const name = phaseNames[data.phase] || data.phase || 'Running';
+        label.textContent = 'TOPOLOGY: ' + name + ' (' + data.progress + '%)';
+
+        if (data.status === 'done') {
+            clearInterval(_topoPoller);
+            btn.disabled = false;
+            document.getElementById('topoProgressBar').classList.remove('show');
+            toast('✓ Topology complete — reloading map');
+            if (data.warnings && data.warnings.length) {
+                const w = data.warnings.slice(0, 2).join(' · ');
+                const extra = data.warnings.length > 2 ? '…' : '';
+                setTimeout(() => toast('⚠ ' + w + extra), 400);
+            }
+            setTimeout(() => runScan(), 800);
+        } else if (data.status === 'error') {
+            clearInterval(_topoPoller);
+            btn.disabled = false;
+            document.getElementById('topoProgressBar').classList.remove('show');
+            toast('✗ Topology error: ' + data.error);
+        }
+    } catch(e) {
+        // server temporarily unavailable, keep polling
+    }
+}
+
+// ── SNMP CONFIG UI ────────────────────────────────────────────────────────────
+let snmpEntries = {};   // ip -> {port, has_community}
+
+async function openSnmpModal() {
+    const res  = await fetch('/snmp-config');
+    snmpEntries = await res.json();
+    renderSnmpList();
+    document.getElementById('snmpModal').classList.add('open');
+}
+
+function closeSnmpModal() {
+    document.getElementById('snmpModal').classList.remove('open');
+}
+
+function renderSnmpList() {
+    const list = document.getElementById('snmpEntryList');
+    list.innerHTML = '';
+    Object.entries(snmpEntries).forEach(([ip, cfg]) => {
+        const row = document.createElement('div');
+        row.className = 'snmp-entry';
+        row.innerHTML = `
+            <span class="snmp-ip">${ip}</span>
+            <span class="snmp-port">port ${cfg.port}</span>
+            <span style="color:var(--accent2);font-size:0.6rem">● configured</span>
+            <button class="btn-snmp-del" onclick="deleteSnmpEntry('${ip}')">✕</button>`;
+        list.appendChild(row);
+    });
+    if (!Object.keys(snmpEntries).length) {
+        list.innerHTML = '<div style="font-family:\'Share Tech Mono\',monospace;font-size:0.62rem;color:var(--text-dim);padding:0.25rem">No entries yet</div>';
+    }
+}
+
+async function addSnmpEntry() {
+    const ip        = document.getElementById('snmp-ip').value.trim();
+    const community = document.getElementById('snmp-community').value.trim();
+    const port      = parseInt(document.getElementById('snmp-port').value) || 161;
+
+    if (!ip || !community) {
+        toast('✗ IP and community required');
+        return;
+    }
+    const res = await fetch('/snmp-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, community, port })
+    });
+    if (res.ok) {
+        snmpEntries[ip] = { port, has_community: true };
+        renderSnmpList();
+        document.getElementById('snmp-ip').value        = '';
+        document.getElementById('snmp-community').value = '';
+        toast('✓ SNMP entry saved');
+    } else {
+        const data = await res.json().catch(()=>({}));
+        toast('✗ ' + (data.error || 'Failed'));
+    }
+}
+
+async function deleteSnmpEntry(ip) {
+    await fetch('/snmp-config', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip })
+    });
+    delete snmpEntries[ip];
+    renderSnmpList();
+    toast('Removed ' + ip);
+}
+
+// ── AUTO UPDATE ───────────────────────────────────────────────────────────────
+let _updateExeUrl = null, _pollTimer = null, _updateToken = null;
 
 async function checkForUpdate() {
     try {
-        // Show current version in header
         const vRes  = await fetch('/version');
         const vData = await vRes.json();
         document.getElementById('hVersion').textContent = 'v' + vData.version;
 
-        // Check GitHub for newer release
         const res  = await fetch('/check-update');
         const data = await res.json();
-
         if (!data.update) return;
 
         _updateExeUrl = data.exe_url;
@@ -870,7 +1458,7 @@ async function checkForUpdate() {
         document.getElementById('u-latest').textContent  = data.latest;
         document.getElementById('u-notes').textContent   = data.notes || 'No release notes.';
         document.getElementById('updateOverlay').classList.add('open');
-    } catch (e) {
+    } catch(e) {
         console.warn('Update check failed:', e);
     }
 }
@@ -882,29 +1470,23 @@ function closeUpdateModal() {
 
 async function startUpdate() {
     if (!_updateExeUrl || !_updateToken) return;
-
     const btn = document.getElementById('u-btn-confirm');
-    btn.disabled = true;
-    btn.textContent = 'Downloading...';
-
+    btn.disabled = true; btn.textContent = 'Downloading...';
     document.getElementById('u-progress-wrap').classList.add('show');
 
     await fetch('/do-update', {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ exe_url: _updateExeUrl, update_token: _updateToken })
+        body: JSON.stringify({ exe_url: _updateExeUrl, update_token: _updateToken })
     });
 
-    // Poll progress
     _pollTimer = setInterval(async () => {
         try {
             const res  = await fetch('/update-progress');
             const data = await res.json();
             const bar  = document.getElementById('u-bar');
             const lbl  = document.getElementById('u-progress-label');
-
             bar.style.width = data.progress + '%';
-
             if (data.status === 'downloading') {
                 lbl.textContent = `Downloading... ${data.progress}%`;
             } else if (data.status === 'replacing') {
@@ -916,17 +1498,19 @@ async function startUpdate() {
             } else if (data.status === 'error') {
                 lbl.textContent = '✗ Error: ' + data.error;
                 clearInterval(_pollTimer);
-                btn.disabled    = false;
-                btn.textContent = 'Retry';
+                btn.disabled = false; btn.textContent = 'Retry';
             }
-        } catch (e) {
-            // Server restarted — update done
+        } catch(e) {
             clearInterval(_pollTimer);
             document.getElementById('u-progress-label').textContent = '✓ Done — reloading...';
             setTimeout(() => location.reload(), 2000);
         }
     }, 600);
 }
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('load',   () => { resizeCanvas(); runScan(); checkForUpdate(); });
 </script>
 </body>
 </html>
