@@ -68,9 +68,13 @@ def get_subnet(local_ip):
 
 def ping_host(ip):
     try:
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             ["ping", "-n", "1", "-w", "300", ip],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1,
+            **kwargs
         )
         return result.returncode == 0
     except Exception:
@@ -79,7 +83,8 @@ def ping_host(ip):
 def get_arp_table():
     discovered = {}
     try:
-        result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=5)
+        kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+        result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=5, **kwargs)
         for line in result.stdout.splitlines():
             match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+([\w-]{17})', line)
             if match:

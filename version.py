@@ -1,2 +1,2 @@
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 GITHUB_REPO = "lucasVE-system/NetTrack"
