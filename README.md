@@ -1,26 +1,11 @@
 # NetTrack
-## not up to date
 
-A tool for tracking network performance and metrics.
-
-## Features
-
-- Real-time monitoring
-- Alerts and notifications
-- Graphs and reports
+A local network device tracker. Scan your network, identify devices, and keep notes on what's connected.
 
 ## Installation
 
-1. Clone the repository: `git clone https://github.com/lucasVE-system/NetTrack.git`
-2. Install dependencies: `npm install`
+Download the latest `NetTrack.exe` from the [Releases](https://github.com/lucasVE-system/NetTrack/releases) page and run it. No installation needed.
 
-## Usage
+## License
 
-To start the application, use the command: `npm start`
-
-## Contribution
-
-If you want to contribute, please fork the repository and submit a pull request. 
-
-### License
-This project is licensed under the MIT License.
+MIT License
