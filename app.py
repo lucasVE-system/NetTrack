@@ -1,19 +1,20 @@
 from flask import Flask, render_template, jsonify, request
-import json, os, subprocess, re, socket, sys
+import json, os, subprocess, re, socket, sys, threading, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from version import VERSION, GITHUB_REPO
 
 app = Flask(__name__)
 
-# ── DATA FILE (works both as script and as .exe) ───────────
-def get_data_file():
+# ── BASE DIR (works both as script and as .exe) ────────────
+def get_base_dir():
     if getattr(sys, 'frozen', False):
-        # Running as compiled .exe — store next to the executable
-        base = os.path.dirname(sys.executable)
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, "devices.json")
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
-# ── MAC VENDOR LOOKUP (singleton — instantiate once) ───────
+def get_data_file():
+    return os.path.join(get_base_dir(), "devices.json")
+
+# ── MAC VENDOR LOOKUP (singleton) ─────────────────────────
 _mac_lookup = None
 def get_mac_lookup():
     global _mac_lookup
@@ -22,7 +23,7 @@ def get_mac_lookup():
             from mac_vendor_lookup import MacLookup
             _mac_lookup = MacLookup()
         except Exception:
-            _mac_lookup = False   # mark as unavailable so we don't retry
+            _mac_lookup = False
     return _mac_lookup if _mac_lookup else None
 
 # ── DATA ──────────────────────────────────────────────────
@@ -37,12 +38,10 @@ def load_devices():
         return []
 
 def save_devices(devices):
-    path = get_data_file()
-    with open(path, "w") as f:
+    with open(get_data_file(), "w") as f:
         json.dump(devices, f, indent=2)
 
 def find_device_index(devices, mac=None, ip=None):
-    """Find a device by MAC (primary key) with IP as fallback."""
     if mac:
         for i, d in enumerate(devices):
             if d.get("mac") == mac:
@@ -123,6 +122,126 @@ def ping_sweep(subnet):
                 pass
     return alive
 
+# ── AUTO UPDATE ───────────────────────────────────────────
+def parse_version(v):
+    v = v.lstrip("v")
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except Exception:
+        return (0, 0, 0)
+
+def fetch_latest_release():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"User-Agent": "NetTrack-updater"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return json.loads(resp.read().decode())
+    except Exception:
+        return None
+
+_update_state = {"status": "idle", "progress": 0, "error": ""}
+
+@app.route("/version")
+def get_version():
+    return jsonify({"version": VERSION})
+
+@app.route("/check-update")
+def check_update():
+    release = fetch_latest_release()
+    if not release:
+        return jsonify({"update": False, "error": "Could not reach GitHub"})
+
+    latest_tag  = release.get("tag_name", "")
+    latest_ver  = parse_version(latest_tag)
+    current_ver = parse_version(VERSION)
+
+    if latest_ver <= current_ver:
+        return jsonify({"update": False, "current": VERSION, "latest": latest_tag})
+
+    exe_url = None
+    for asset in release.get("assets", []):
+        if asset["name"].lower().endswith(".exe"):
+            exe_url = asset["browser_download_url"]
+            break
+
+    return jsonify({
+        "update":  True,
+        "current": VERSION,
+        "latest":  latest_tag,
+        "exe_url": exe_url,
+        "notes":   release.get("body", "")
+    })
+
+@app.route("/update-progress")
+def update_progress():
+    return jsonify(_update_state)
+
+@app.route("/do-update", methods=["POST"])
+def do_update():
+    data    = request.get_json()
+    exe_url = data.get("exe_url")
+    if not exe_url:
+        return jsonify({"ok": False, "error": "No download URL"}), 400
+
+    def run_update():
+        global _update_state
+        _update_state = {"status": "downloading", "progress": 0, "error": ""}
+        try:
+            base    = get_base_dir()
+            current = sys.executable if getattr(sys, 'frozen', False) \
+                      else os.path.join(base, "NetTrack.exe")
+            tmp     = current + ".new"
+            bak     = current + ".bak"
+
+            # Download with progress tracking
+            req = urllib.request.Request(exe_url, headers={"User-Agent": "NetTrack-updater"})
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                total      = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                with open(tmp, "wb") as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            _update_state["progress"] = int(downloaded / total * 100)
+
+            _update_state["progress"] = 100
+            _update_state["status"]   = "replacing"
+
+            # Swap files
+            if os.path.exists(bak):
+                os.remove(bak)
+            if os.path.exists(current):
+                os.rename(current, bak)
+            os.rename(tmp, current)
+
+            _update_state["status"] = "restarting"
+
+            def restart():
+                time.sleep(1.5)
+                if sys.platform == "win32":
+                    subprocess.Popen([current], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    subprocess.Popen([current])
+                os._exit(0)
+
+            threading.Thread(target=restart, daemon=True).start()
+
+        except Exception as e:
+            _update_state["status"] = "error"
+            _update_state["error"]  = str(e)
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+
+    threading.Thread(target=run_update, daemon=True).start()
+    return jsonify({"ok": True})
+
 # ── ROUTES ────────────────────────────────────────────────
 @app.route("/")
 def home():
@@ -136,13 +255,9 @@ def get_devices():
 def scan():
     local_ip    = get_local_ip()
     subnet      = get_subnet(local_ip)
-
-    # Single ARP pass before ping, then one more after to catch new entries
     arp_before  = get_arp_table()
     alive_ips   = ping_sweep(subnet)
     arp_after   = get_arp_table()
-
-    # Merge both ARP snapshots (after wins on conflict)
     arp_results = {**arp_before, **arp_after}
 
     all_ips = set(list(arp_results.keys()) + alive_ips)
@@ -168,29 +283,23 @@ def scan():
 
 @app.route("/save", methods=["POST"])
 def save_one():
-    """Save a single device. Uses MAC as primary key, IP as fallback."""
-    data    = request.get_json()
-    device  = data.get("device")
-    mac     = data.get("mac")
-    ip      = device.get("ip") if device else None
-
+    data   = request.get_json()
+    device = data.get("device")
+    mac    = data.get("mac")
+    ip     = device.get("ip") if device else None
     if not device:
         return jsonify({"ok": False, "error": "No device provided"}), 400
-
     devices = load_devices()
     idx     = find_device_index(devices, mac=mac, ip=ip)
-
     if idx >= 0:
         devices[idx] = device
     else:
         devices.append(device)
-
     save_devices(devices)
     return jsonify({"ok": True})
 
 @app.route("/save-all", methods=["POST"])
 def save_all():
-    """Replace the entire device list (called after every scan)."""
     devices = request.get_json()
     if not isinstance(devices, list):
         return jsonify({"ok": False, "error": "Expected a list"}), 400
@@ -199,13 +308,11 @@ def save_all():
 
 @app.route("/delete-device", methods=["POST"])
 def delete_device():
-    """Delete a device by MAC (primary key) with IP as fallback."""
     data    = request.get_json()
     mac     = data.get("mac")
     ip      = data.get("ip")
     devices = load_devices()
     idx     = find_device_index(devices, mac=mac, ip=ip)
-
     if idx >= 0:
         devices.pop(idx)
         save_devices(devices)

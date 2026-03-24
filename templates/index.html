@@ -302,6 +302,85 @@
             font-family: 'Share Tech Mono', monospace;
             font-size: 0.75rem; letter-spacing: 2px;
         }
+
+        /* ── UPDATE MODAL ── */
+        #updateOverlay {
+            position: fixed; inset: 0;
+            background: rgba(7,11,18,0.85);
+            display: none; align-items: center; justify-content: center;
+            z-index: 500; backdrop-filter: blur(4px);
+        }
+        #updateOverlay.open { display: flex; }
+
+        #updateModal {
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            width: 420px; padding: 1.8rem;
+            box-shadow: 0 0 40px rgba(0,212,255,0.15);
+            display: flex; flex-direction: column; gap: 1rem;
+        }
+
+        .update-title {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem; letter-spacing: 3px;
+            color: var(--accent); text-transform: uppercase;
+        }
+        .update-versions {
+            display: flex; gap: 1rem; align-items: center;
+            font-family: 'Share Tech Mono', monospace; font-size: 0.78rem;
+        }
+        .ver-tag {
+            padding: 0.25rem 0.6rem; border-radius: 3px; font-size: 0.7rem;
+        }
+        .ver-tag.old { background: rgba(255,69,96,0.1); border: 1px solid rgba(255,69,96,0.3); color: var(--danger); }
+        .ver-tag.new { background: rgba(0,255,157,0.1); border: 1px solid rgba(0,255,157,0.3); color: var(--accent2); }
+        .ver-arrow { color: var(--text-dim); }
+
+        .update-notes {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.68rem; color: var(--text);
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 3px; padding: 0.75rem;
+            max-height: 120px; overflow-y: auto;
+            white-space: pre-wrap; line-height: 1.6;
+        }
+
+        .update-progress-wrap {
+            display: none; flex-direction: column; gap: 0.5rem;
+        }
+        .update-progress-wrap.show { display: flex; }
+        .progress-bar-track {
+            height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; background: var(--accent2);
+            border-radius: 2px; width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.65rem; color: var(--text-dim);
+            letter-spacing: 1px; text-align: center;
+        }
+
+        .update-actions { display: flex; gap: 0.6rem; }
+        .btn-update-confirm {
+            flex: 1; padding: 0.65rem;
+            background: transparent; border: 1px solid var(--accent2);
+            color: var(--accent2); font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase;
+            cursor: pointer; border-radius: 3px; transition: all 0.2s;
+        }
+        .btn-update-confirm:hover { background: var(--accent2); color: var(--bg); }
+        .btn-update-confirm:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn-update-skip {
+            padding: 0.65rem 1rem;
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-dim); font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem; cursor: pointer; border-radius: 3px; transition: all 0.2s;
+        }
+        .btn-update-skip:hover { border-color: var(--danger); color: var(--danger); }
     </style>
 </head>
 <body>
@@ -312,9 +391,33 @@
         <div class="stat">SUBNET <span id="hSubnet">—</span></div>
         <div class="stat">DEVICES <span id="hCount">—</span></div>
         <div class="stat">RANDOMIZED <span class="warn" id="hRandom">—</span></div>
+        <div class="stat">VERSION <span id="hVersion">—</span></div>
     </div>
     <button class="btn-rescan" id="rescanBtn" onclick="runScan()">⟳ Rescan</button>
 </header>
+
+<!-- Update Modal -->
+<div id="updateOverlay">
+    <div id="updateModal">
+        <div class="update-title">⬆ Update Available</div>
+        <div class="update-versions">
+            <span class="ver-tag old" id="u-current">—</span>
+            <span class="ver-arrow">→</span>
+            <span class="ver-tag new" id="u-latest">—</span>
+        </div>
+        <div class="update-notes" id="u-notes"></div>
+        <div class="update-progress-wrap" id="u-progress-wrap">
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="u-bar"></div>
+            </div>
+            <div class="progress-label" id="u-progress-label">Downloading...</div>
+        </div>
+        <div class="update-actions">
+            <button class="btn-update-confirm" id="u-btn-confirm" onclick="startUpdate()">Install &amp; Restart</button>
+            <button class="btn-update-skip" onclick="closeUpdateModal()">Skip</button>
+        </div>
+    </div>
+</div>
 
 <div id="mapWrap">
     <canvas id="mapCanvas"></canvas>
@@ -741,7 +844,87 @@ async function runScan() {
 }
 
 window.addEventListener('resize', resizeCanvas);
-window.addEventListener('load',   () => { resizeCanvas(); runScan(); });
+window.addEventListener('load',   () => { resizeCanvas(); runScan(); checkForUpdate(); });
+
+// ── AUTO UPDATE ───────────────────────────────────────────
+let _updateExeUrl = null;
+let _pollTimer    = null;
+
+async function checkForUpdate() {
+    try {
+        // Show current version in header
+        const vRes  = await fetch('/version');
+        const vData = await vRes.json();
+        document.getElementById('hVersion').textContent = 'v' + vData.version;
+
+        // Check GitHub for newer release
+        const res  = await fetch('/check-update');
+        const data = await res.json();
+
+        if (!data.update) return;
+
+        _updateExeUrl = data.exe_url;
+        document.getElementById('u-current').textContent = 'v' + data.current;
+        document.getElementById('u-latest').textContent  = data.latest;
+        document.getElementById('u-notes').textContent   = data.notes || 'No release notes.';
+        document.getElementById('updateOverlay').classList.add('open');
+    } catch (e) {
+        console.warn('Update check failed:', e);
+    }
+}
+
+function closeUpdateModal() {
+    document.getElementById('updateOverlay').classList.remove('open');
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+}
+
+async function startUpdate() {
+    if (!_updateExeUrl) return;
+
+    const btn = document.getElementById('u-btn-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Downloading...';
+
+    document.getElementById('u-progress-wrap').classList.add('show');
+
+    await fetch('/do-update', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ exe_url: _updateExeUrl })
+    });
+
+    // Poll progress
+    _pollTimer = setInterval(async () => {
+        try {
+            const res  = await fetch('/update-progress');
+            const data = await res.json();
+            const bar  = document.getElementById('u-bar');
+            const lbl  = document.getElementById('u-progress-label');
+
+            bar.style.width = data.progress + '%';
+
+            if (data.status === 'downloading') {
+                lbl.textContent = `Downloading... ${data.progress}%`;
+            } else if (data.status === 'replacing') {
+                lbl.textContent = 'Installing...';
+            } else if (data.status === 'restarting') {
+                lbl.textContent = 'Restarting — please wait...';
+                clearInterval(_pollTimer);
+                btn.textContent = 'Restarting...';
+            } else if (data.status === 'error') {
+                lbl.textContent = '✗ Error: ' + data.error;
+                clearInterval(_pollTimer);
+                btn.disabled    = false;
+                btn.textContent = 'Retry';
+            }
+        } catch (e) {
+            // Server restarted — update done
+            clearInterval(_pollTimer);
+            document.getElementById('u-progress-label').textContent = '✓ Done — reloading...';
+            setTimeout(() => location.reload(), 2000);
+        }
+    }, 600);
+}
 </script>
 </body>
 </html>
