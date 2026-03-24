@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify, request
-import json, os, subprocess, re, socket, sys, threading, time, urllib.request
+import json, os, subprocess, re, socket, sys, threading, time, urllib.request, secrets
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from version import VERSION, GITHUB_REPO
 
@@ -145,6 +146,24 @@ def fetch_latest_release():
         return None
 
 _update_state = {"status": "idle", "progress": 0, "error": ""}
+_latest_exe_url = None
+_update_token = secrets.token_urlsafe(24)
+
+ALLOWED_UPDATE_HOSTS = {"github.com", "objects.githubusercontent.com"}
+ALLOWED_GITHUB_PATH_PREFIX = f"/{GITHUB_REPO}/releases/download/"
+
+def is_allowed_update_url(url):
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            return False
+        if parsed.hostname not in ALLOWED_UPDATE_HOSTS:
+            return False
+        if parsed.hostname == "github.com" and not parsed.path.startswith(ALLOWED_GITHUB_PATH_PREFIX):
+            return False
+        return True
+    except Exception:
+        return False
 
 @app.route("/version")
 def get_version():
@@ -152,6 +171,7 @@ def get_version():
 
 @app.route("/check-update")
 def check_update():
+    global _latest_exe_url
     release = fetch_latest_release()
     if not release:
         return jsonify({"update": False, "error": "Could not reach GitHub"})
@@ -169,11 +189,17 @@ def check_update():
             exe_url = asset["browser_download_url"]
             break
 
+    if exe_url and not is_allowed_update_url(exe_url):
+        exe_url = None
+
+    _latest_exe_url = exe_url
+
     return jsonify({
         "update":  True,
         "current": VERSION,
         "latest":  latest_tag,
         "exe_url": exe_url,
+        "update_token": _update_token,
         "notes":   release.get("body", "")
     })
 
@@ -183,10 +209,19 @@ def update_progress():
 
 @app.route("/do-update", methods=["POST"])
 def do_update():
-    data    = request.get_json()
+    data = request.get_json() or {}
     exe_url = data.get("exe_url")
+    token = data.get("update_token")
+
+    if token != _update_token:
+        return jsonify({"ok": False, "error": "Invalid update token"}), 403
+
     if not exe_url:
         return jsonify({"ok": False, "error": "No download URL"}), 400
+    if exe_url != _latest_exe_url:
+        return jsonify({"ok": False, "error": "Mismatched update URL"}), 400
+    if not is_allowed_update_url(exe_url):
+        return jsonify({"ok": False, "error": "Blocked update URL"}), 400
 
     def run_update():
         global _update_state
