@@ -31,3 +31,8 @@ dist/
 *.spec
 *.dist
 __pycache__/
+
+
+launcher.build/
+launcher.dist/
+launcher.onefile-build/

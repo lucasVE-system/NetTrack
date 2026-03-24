@@ -311,7 +311,7 @@
     <div class="header-stats">
         <div class="stat">SUBNET <span id="hSubnet">—</span></div>
         <div class="stat">DEVICES <span id="hCount">—</span></div>
-        <div class="stat">ENDPOINTS <span class="warn" id="hRandom">—</span></div>
+        <div class="stat">RANDOMIZED <span class="warn" id="hRandom">—</span></div>
     </div>
     <button class="btn-rescan" id="rescanBtn" onclick="runScan()">⟳ Rescan</button>
 </header>
@@ -358,6 +358,13 @@
                     <option value="ap">Access Point</option>
                     <option value="firewall">Firewall</option>
                     <option value="server">Server</option>
+                    <option value="pc">PC / Desktop</option>
+                    <option value="laptop">Laptop</option>
+                    <option value="phone">Phone / Tablet</option>
+                    <option value="iot">IoT / Smart Device</option>
+                    <option value="printer">Printer</option>
+                    <option value="nas">NAS / Storage</option>
+                    <option value="camera">Camera</option>
                     <option value="other">Other</option>
                 </select>
             </div>
@@ -404,8 +411,19 @@ let dragOffX    = 0, dragOffY = 0;
 let dragMoved   = false;
 
 const ICONS = {
-    router: '🌐', switch: '🔀', ap: '📶',
-    firewall: '🛡️', server: '🖥️', other: '📡'
+    router:   '🌐',
+    switch:   '🔀',
+    ap:       '📶',
+    firewall: '🛡️',
+    server:   '🖥️',
+    pc:       '🖥️',
+    laptop:   '💻',
+    phone:    '📱',
+    iot:      '💡',
+    printer:  '🖨️',
+    nas:      '💾',
+    camera:   '📷',
+    other:    '📡'
 };
 
 // ── MAC UTILS ─────────────────────────────────────────────
@@ -620,8 +638,9 @@ async function saveDevice() {
     if (res.ok) {
         devices[selectedIdx]      = updated;
         nodes[selectedIdx].device = updated;
-        nodes[selectedIdx].el.querySelector('.node-label').textContent = updated.name || updated.hostname || '—';
-        nodes[selectedIdx].el.querySelector('.node-ip').textContent    = updated.ip;
+        nodes[selectedIdx].el.querySelector('.node-label').textContent =
+            updated.name || updated.hostname || '—';
+        nodes[selectedIdx].el.querySelector('.node-ip').textContent = updated.ip;
         updateNodeIcon();
         toast('✓ Saved');
     } else {
@@ -634,11 +653,16 @@ async function deleteDevice() {
     const d = nodes[selectedIdx].device;
     if (!confirm(`Remove ${d.ip} from inventory?`)) return;
 
-    await fetch('/delete-device', {
+    const res = await fetch('/delete-device', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mac: d.mac || null, ip: d.ip })
     });
+
+    if (!res.ok) {
+        toast('✗ Delete failed');
+        return;
+    }
 
     nodes[selectedIdx].el.remove();
     devices.splice(selectedIdx, 1);
