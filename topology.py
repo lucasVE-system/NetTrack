@@ -1083,18 +1083,50 @@ def infer_device_type(device: Dict) -> str:
     infra_keywords = {
         "router":   ["router", "gateway", "openwrt", "routeros", "dd-wrt", "pfsense",
                      "mikrotik", "ubiquiti edgerouter", "cisco ios xe", "cisco ios",
-                     "juniper junos", "fortigate", "vyos"],
+                     "juniper junos", "fortigate", "vyos",
+                     # Common consumer router vendors/models
+                     "d-link", "dlink", "dir-", "dsr-",
+                     "comtrend", "technicolor", "sagemcom", "speedtouch",
+                     "zyxel", "zte", "huawei hg", "huawei eg",
+                     "tp-link", "tplink", "archer", "tl-wr", "tl-er",
+                     "netgear", "nighthawk", "orbi",
+                     "asus rt-", "asus rog",
+                     "linksys", "velop",
+                     "fritz", "fritzbox", "avm",
+                     "bbox", "livebox", "freebox",
+                     "vodafone station", "telenet", "proximus"],
         "switch":   ["switch", "catalyst", "procurve", "powerconnect", "comware",
-                     "nexus", "ex series", "ex2", "sg2", "sg3", "netgear gs"],
+                     "nexus", "ex series", "ex2", "sg2", "sg3", "netgear gs",
+                     "netgear fs", "tp-link tl-sg", "tp-link tl-sf",
+                     "d-link dgs", "d-link des", "d-link dss",
+                     "zyxel gs", "zyxel es",
+                     "unmanaged switch", "managed switch"],
         "ap":       ["access point", "unifi", "aironet", "aruba", "meraki",
-                     "linksys wrt", "airport", "eap", "ew", "wap"],
+                     "linksys wrt", "airport", "eap", "ew", "wap",
+                     "tp-link eap", "omada",
+                     "d-link dap", "zyxel nwa",
+                     "ruckus", "ubiquiti uap"],
         "firewall": ["firewall", "asa ", "fortigate", "pfsense", "sophos", "checkpoint",
-                     "iptables", "opnsense"],
+                     "iptables", "opnsense", "untangle", "smoothwall"],
     }
     combined = f"{vendor} {hostname} {sys_descr}"
     for dtype, kws in infra_keywords.items():
         if any(kw in combined for kw in kws):
             return dtype
+
+    # Banner-based router detection — HTTP response contains router login page
+    banner_80  = banners.get(80, "")
+    banner_443 = banners.get(443, "")
+    banner_combined = banner_80 + " " + banner_443
+    router_banner_kws = [
+        "d-link", "dlink", "dir-", "netgear", "tp-link", "tplink",
+        "zyxel", "comtrend", "technicolor", "sagemcom", "fritzbox",
+        "linksys", "asus router", "log in to the router",
+        "router login", "gateway login", "modem login",
+        "livebox", "freebox", "bbox",
+    ]
+    if any(kw in banner_combined for kw in router_banner_kws):
+        return "router"
 
     # Gateway heuristic: x.x.x.1 or x.x.x.254
     if ip.endswith(".1") or ip.endswith(".254"):
@@ -1137,9 +1169,19 @@ def infer_device_type(device: Dict) -> str:
     if any(k in combined for k in ["espressif", "tuya", "shelly", "tasmota",
                                      "philips hue", "ikea tradfri", "nest",
                                      "ring", "amazon echo", "google home",
-                                     "sonos", "wemo", "arlo", "roborock"]):
+                                     "sonos", "wemo", "arlo", "roborock",
+                                     # Energy / smart meter gateways
+                                     "nrg", "p1 gateway", "homewizard", "youless",
+                                     "dsmr", "slimmemeter", "energy gateway",
+                                     "solar", "inverter", "enphase", "solaredge",
+                                     "guangzhou juan", "optical"]):
         return "iot"
     if "homekit" in services or "googlecast" in services or "airplay" in services:
+        return "iot"
+    # Energy/IoT banner detection
+    iot_banner_kws = ["nrg gateway", "p1 gateway", "dsmr", "vitals", "homewizard",
+                      "youless", "enphase", "solaredge"]
+    if any(kw in banner_combined for kw in iot_banner_kws):
         return "iot"
 
     # Nintendo

@@ -1,0 +1,242 @@
+{
+  "nodes": [
+    {
+      "hostname": "",
+      "ip": "192.168.0.1",
+      "mac": "6A:02:B8:B3:32:79",
+      "vendor": "",
+      "randomized": true,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": []
+    },
+    {
+      "hostname": "dlinkrouter",
+      "ip": "192.168.0.2",
+      "mac": "C0:A0:BB:E6:A0:89",
+      "vendor": "D-Link International",
+      "randomized": false,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "mdns_services": [
+        "http"
+      ],
+      "open_ports": [
+        80,
+        443,
+        49152
+      ]
+    },
+    {
+      "hostname": "OpenWrt",
+      "ip": "192.168.0.51",
+      "mac": "A0:63:91:98:99:CA",
+      "vendor": "NETGEAR",
+      "randomized": false,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "mdns_services": [
+        "http",
+        "workstation"
+      ],
+      "open_ports": [
+        80,
+        443
+      ]
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.111",
+      "mac": "D8:B6:B7:91:A5:E1",
+      "vendor": "Comtrend Corporation",
+      "randomized": false,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": []
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.119",
+      "mac": "00:40:AD:AD:BF:AF",
+      "vendor": "SMA REGELSYSTEME GMBH",
+      "randomized": false,
+      "type": "other",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": [
+        80
+      ]
+    },
+    {
+      "hostname": "Ultra-Dongle",
+      "ip": "192.168.0.143",
+      "mac": "66:E8:33:5F:3B:0C",
+      "vendor": "",
+      "randomized": true,
+      "type": "iot",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "mdns_services": [
+        "http"
+      ],
+      "open_ports": [
+        80
+      ]
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.155",
+      "mac": "9C:A3:A9:E2:2E:76",
+      "vendor": "Guangzhou Juan Optical and Electronical Tech Joint Stock Co., Ltd",
+      "randomized": false,
+      "type": "iot",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": [
+        80
+      ]
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.171",
+      "mac": "6A:2D:64:E0:39:56",
+      "vendor": "",
+      "randomized": true,
+      "type": "other",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": []
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.205",
+      "mac": "6A:63:59:E8:6E:A8",
+      "vendor": "",
+      "randomized": true,
+      "type": "other",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": [
+        8080
+      ]
+    },
+    {
+      "hostname": "OpenWrt",
+      "ip": "192.168.0.239",
+      "mac": "A0:63:91:98:99:CA",
+      "vendor": "NETGEAR",
+      "randomized": false,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "mdns_services": [
+        "http",
+        "workstation"
+      ],
+      "open_ports": []
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.0.245",
+      "mac": "F6:C2:F1:4A:2E:AB",
+      "vendor": "",
+      "randomized": true,
+      "type": "other",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": []
+    },
+    {
+      "hostname": "",
+      "ip": "192.168.218.254",
+      "mac": "00:50:56:F4:BC:13",
+      "vendor": "VMware, Inc.",
+      "randomized": false,
+      "type": "router",
+      "name": "",
+      "room": "",
+      "notes": "",
+      "open_ports": []
+    }
+  ],
+  "edges": [
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.2",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.51",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.111",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.119",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.143",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.155",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.171",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.205",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.239",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.0.245",
+      "type": "inferred_star"
+    },
+    {
+      "src": "192.168.0.1",
+      "dst": "192.168.218.254",
+      "type": "inferred_star"
+    }
+  ],
+  "meta": {
+    "has_lldp": false,
+    "has_snmp": false,
+    "has_mdns": true,
+    "has_ssdp": false,
+    "has_dhcp_fp": false,
+    "has_traceroute": true
+  }
+}
