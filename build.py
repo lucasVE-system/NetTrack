@@ -11,7 +11,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(ROOT, "dist")
-ICON = os.path.join(ROOT, "NetTrack.ico")
+ICON = os.path.join(ROOT, "app-icon.ico")
 
 
 def main() -> int:

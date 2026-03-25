@@ -143,3 +143,6 @@ Section "Uninstall"
   DeleteRegKey HKLM "${REG_UNINSTALL}"
 
 SectionEnd
+
+  Icon "app-icon.ico"
+  UninstallIcon "app-icon.ico"

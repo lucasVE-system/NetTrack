@@ -11,8 +11,8 @@ Security notes
 * All subprocess calls inside topology.py use list args + timeouts.
 * Input validation happens at every endpoint before touching the filesystem
   or calling topology functions.
-* devices.json and topology.json live next to the executable; path traversal
-  is impossible because we use os.path.join with get_base_dir().
+* devices.json and topology.json live in %APPDATA%\NetTrack when frozen
+  (installed), or next to the script when running from source.
 """
 
 from __future__ import annotations
@@ -41,7 +41,12 @@ app = Flask(__name__)
 # ── BASE DIR ──────────────────────────────────────────────────────────────────
 def get_base_dir() -> str:
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        # When installed (e.g. in Program Files), write data to %APPDATA%\NetTrack
+        # so we never need write access to the install directory.
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
+        data_dir = os.path.join(appdata, "NetTrack")
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_data_file() -> str:
