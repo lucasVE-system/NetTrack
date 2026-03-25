@@ -1,0 +1,8 @@
+# NetTrack — core (minimal scan + UI)
+flask>=3.0
+mac-vendor-lookup>=0.1.12
+
+# Optional — full topology discovery (install as needed)
+# pysnmp>=4.4       # SNMP queries (switches / ARP / LLDP via management)
+# zeroconf>=0.131   # mDNS / Bonjour passive listener
+# scapy>=2.5        # LLDP sniff on Windows (often requires admin); Linux may use raw sockets
