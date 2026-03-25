@@ -1,29 +1,31 @@
-NetTrack Software License
+NetTrack Software License v1.0
 Copyright (c) 2024-2025 lucasVE-system
 
+This is a source-available license. The Software is free for personal use
+by individuals. Any use by organisations requires a separate commercial license.
+
+-------------------------------------------------------------------------------
 DEFINITIONS
 
 "Software" means the NetTrack source code, compiled binaries, documentation,
 and all associated files in this repository.
 
-"Personal Use" means use by a natural person solely for private, non-commercial
-purposes on devices they personally own or control.
+"Personal Use" means use by a natural person (including students) solely for
+private, non-commercial purposes on devices they personally own or control.
 
-"Non-Commercial Use" means use by individuals, non-profit organisations, or
-educational institutions where no revenue, fee, or other commercial benefit is
-derived directly or indirectly from the use of the Software.
+"Organisation" means any legal entity, including but not limited to companies,
+businesses, government bodies, schools, universities, and non-profit organisations.
 
-"Commercial Use" means any use of the Software — including deployment,
-integration, distribution, or resale — in a for-profit context, by a
-for-profit organisation, or in connection with a product or service for which
-payment is received.
+"Commercial Use" means any use of the Software by an Organisation, or any use
+in connection with revenue generation, business operations, or services provided
+to third parties, whether direct or indirect.
 
 -------------------------------------------------------------------------------
-GRANT OF LICENSE — PERSONAL AND NON-COMMERCIAL USE
+GRANT OF LICENSE — PERSONAL USE
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this Software, to use, copy, modify, and run it solely for Personal Use or
-Non-Commercial Use, subject to the following conditions:
+Permission is hereby granted, free of charge, to any natural person obtaining
+a copy of this Software to use, copy, modify, and run it solely for Personal Use,
+subject to the following conditions:
 
 1. This license notice and copyright statement must be retained in all copies
    or substantial portions of the Software.
@@ -32,21 +34,31 @@ Non-Commercial Use, subject to the following conditions:
    misrepresented as the original Software.
 
 3. Redistribution of the Software or modified versions is permitted only under
-   the same license terms stated here, free of charge, and only for Personal
-   or Non-Commercial Use.
+   the same license terms stated here, free of charge, and only for Personal Use.
 
 -------------------------------------------------------------------------------
-COMMERCIAL USE — SEPARATE LICENSE REQUIRED
+RESTRICTION — ORGANISATIONAL USE
+
+Use of the Software by an Organisation is not permitted under this license,
+regardless of whether the use is commercial, educational, non-profit, or internal.
+
+Students may use the Software under this license only in their individual capacity.
+Use by or on behalf of an educational institution (including but not limited to
+classrooms, labs, managed devices, or institutional networks) requires a separate
+commercial license.
+
+-------------------------------------------------------------------------------
+COMMERCIAL LICENSE
 
 Any Commercial Use of this Software requires a separate written commercial
 license agreement obtained from the copyright holder prior to such use.
 
 Examples of use that require a commercial license (non-exhaustive):
-  - Deploying or running the Software within a company or organisation for
-    internal business operations.
-  - Including or bundling the Software with a commercial product or service.
-  - Offering the Software or a derivative as a paid or freemium service.
-  - Using the Software to provide managed or hosted services to third parties.
+  - Deploying or running the Software within a company or organisation
+  - Use within schools, universities, or training institutions
+  - Including or bundling the Software with a product or service
+  - Offering the Software or a derivative as a paid or hosted service
+  - Providing services to third parties using the Software
 
 To inquire about commercial licensing, contact the copyright holder via the
 repository listed in version.py (GITHUB_REPO).
@@ -67,3 +79,8 @@ TERMINATION
 This license is automatically terminated if you fail to comply with any of its
 terms. Upon termination you must cease all use and destroy all copies of the
 Software in your possession.
+
+-------------------------------------------------------------------------------
+GOVERNING LAW
+
+This license shall be governed by and construed in accordance with the laws of Belgium.
