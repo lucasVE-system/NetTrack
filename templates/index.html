@@ -560,6 +560,18 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
     </div>
 </div>
 
+<!-- Topology discovery options bar -->
+<div class="topo-opts-bar" id="topoOptsBar">
+    <span class="topo-opts-label">TOPOLOGY OPTIONS:</span>
+    <label class="topo-opt"><input type="checkbox" id="optTraceroute" checked> Traceroute</label>
+    <label class="topo-opt"><input type="checkbox" id="optSnmp"       checked> SNMP</label>
+    <label class="topo-opt"><input type="checkbox" id="optPassive"    checked> Passive (LLDP+DHCP)</label>
+    <label class="topo-opt"><input type="checkbox" id="optMdns"       checked> mDNS</label>
+    <label class="topo-opt"><input type="checkbox" id="optSsdp"       checked> SSDP/UPnP</label>
+    <label class="topo-opt"><input type="checkbox" id="optNetbios"    checked> NetBIOS</label>
+    <label class="topo-opt"><input type="checkbox" id="optBanners"    checked> Banners</label>
+</div>
+
 <div id="mapWrap">
     <canvas id="mapCanvas"></canvas>
 

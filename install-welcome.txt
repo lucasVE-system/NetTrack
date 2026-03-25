@@ -1,0 +1,7 @@
+Thank you for installing NetTrack.
+
+NetTrack helps you discover devices on your local network and map how they connect. The dashboard runs only on this computer at http://127.0.0.1:5000 — it is not opened to the rest of the network.
+
+After setup you can launch NetTrack from the Start menu or desktop shortcut. Your scan data and SNMP settings are stored next to the application.
+
+For the best experience with advanced discovery (SNMP, mDNS, LLDP), run NetTrack from an administrator account when Windows requests it.
