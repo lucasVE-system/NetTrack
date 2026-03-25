@@ -2,8 +2,6 @@
 Build NetTrack.exe with PyInstaller (one-file, no console).
 Requires: pip install pyinstaller
 Output: dist/NetTrack.exe
-
-For a branded icon, add NetTrack.ico in this folder and uncomment --icon below.
 """
 import os
 import subprocess
@@ -22,8 +20,12 @@ def main() -> int:
         return 1
 
     hidden = [
+        "app",
+        "topology",
+        "version",
         "pysnmp", "pysnmp.hlapi", "zeroconf", "zeroconf._protocol",
         "dns", "mac_vendor_lookup", "scapy", "scapy.layers.l2", "scapy.sendrecv",
+        "flask", "jinja2", "werkzeug",
     ]
     hi_args: list[str] = []
     for m in hidden:
@@ -41,6 +43,9 @@ def main() -> int:
     ]
     if os.path.isfile(ICON):
         cmd.extend(["--icon", ICON])
+        print(f"Using icon: {ICON}")
+    else:
+        print("No icon found, building without icon.")
 
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd, cwd=ROOT)

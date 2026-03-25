@@ -1,4 +1,4 @@
-"""
+r"""
 app.py  –  NetTrack Flask backend
 ==================================
 Serves the web UI and all API endpoints.
@@ -41,7 +41,7 @@ app = Flask(__name__)
 # ── BASE DIR ──────────────────────────────────────────────────────────────────
 def get_base_dir() -> str:
     if getattr(sys, 'frozen', False):
-        # When installed (e.g. in Program Files), write data to %APPDATA%\NetTrack
+       #r When installed (e.g. in Program Files), write data to %APPDATA%\NetTrack
         # so we never need write access to the install directory.
         appdata = os.environ.get("APPDATA") or os.path.expanduser("~")
         data_dir = os.path.join(appdata, "NetTrack")
