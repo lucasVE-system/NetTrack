@@ -4,7 +4,7 @@
 ; Optional: place NetTrack.ico in the same folder for a branded setup icon
 
 #define MyAppName      "NetTrack"
-#define MyAppVersion   "1.3.0"
+#define MyAppVersion   "1.2.0"
 #define MyAppPublisher "lucasVE-system"
 #define MyAppURL       "https://github.com/lucasVE-system/NetTrack"
 #define MyAppExeName   "NetTrack.exe"
