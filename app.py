@@ -38,6 +38,9 @@ import topology as topo
 
 app = Flask(__name__)
 
+def api_error(message: str, status: int = 400):
+    return jsonify({"ok": False, "error": message}), status
+
 # ── BASE DIR ──────────────────────────────────────────────────────────────────
 def get_base_dir() -> str:
     if getattr(sys, 'frozen', False):
@@ -227,6 +230,33 @@ def ping_sweep(subnet: str) -> List[str]:
                 pass
     return alive
 
+def scan_subnet_devices(subnet: str, local_ip: str = "") -> List[Dict]:
+    """Run scan pipeline for a single /24-style subnet prefix (e.g. 192.168.1)."""
+    arp_before = get_arp_table()
+    alive_ips  = ping_sweep(subnet)
+    arp_after  = get_arp_table()
+    arp_results = {**arp_before, **arp_after}
+
+    all_ips = set(list(arp_results.keys()) + alive_ips)
+    if local_ip:
+        all_ips.discard(local_ip)
+
+    found: Dict[str, Dict] = {}
+    for ip in all_ips:
+        if not topo._valid_ip(ip):
+            continue
+        if not ip.startswith(subnet + "."):
+            continue
+        mac    = arp_results.get(ip, "")
+        vendor = lookup_vendor(mac) if mac else ""
+        host   = get_hostname(ip)
+        found[ip] = {"ip": ip, "mac": mac, "vendor": vendor, "hostname": host}
+
+    return sorted(
+        found.values(),
+        key=lambda x: tuple(int(p) for p in x["ip"].split("."))
+    )
+
 # ── BACKGROUND TOPOLOGY JOB ───────────────────────────────────────────────────
 _topo_state: Dict = {
     "status":   "idle",   # idle | running | done | error
@@ -234,6 +264,10 @@ _topo_state: Dict = {
     "phase":    "",
     "error":    "",
     "warnings": [],
+    "started_at_ms": 0,
+    "phase_started_at_ms": 0,
+    "phase_timings_ms": {},
+    "devices_scanned": 0,
 }
 _topo_lock = threading.Lock()
 _TOPO_WARNINGS_MAX = 32
@@ -251,6 +285,18 @@ def _append_topo_warning(msg: str):
         w = _topo_state.setdefault("warnings", [])
         if len(w) < _TOPO_WARNINGS_MAX:
             w.append(text)
+
+def _mark_topo_phase(new_phase: str):
+    now = int(time.time() * 1000)
+    with _topo_lock:
+        old_phase = _topo_state.get("phase")
+        old_start = _topo_state.get("phase_started_at_ms", 0)
+        timings = dict(_topo_state.get("phase_timings_ms", {}))
+        if old_phase and old_start:
+            timings[old_phase] = timings.get(old_phase, 0) + max(0, now - old_start)
+        _topo_state["phase"] = new_phase
+        _topo_state["phase_started_at_ms"] = now
+        _topo_state["phase_timings_ms"] = timings
 
 def run_topology_discovery(scan_devices: List[Dict],
                             local_ip: str,
@@ -284,14 +330,26 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
                                   run_ssdp: bool,
                                   run_netbios: bool,
                                   run_banners: bool):
-    _update_topo_state(status="running", progress=0, phase="init", error="", warnings=[])
+    now_ms = int(time.time() * 1000)
+    _update_topo_state(
+        status="running",
+        progress=0,
+        phase="init",
+        error="",
+        warnings=[],
+        started_at_ms=now_ms,
+        phase_started_at_ms=now_ms,
+        phase_timings_ms={},
+        devices_scanned=len(scan_devices),
+    )
 
     ips = [d["ip"] for d in scan_devices if d.get("ip") and topo._valid_ip(d["ip"])]
 
     # ── Phase 1: Traceroute ───────────────────────────────────────────────────
     traceroute_data = None
     if run_traceroute:
-        _update_topo_state(progress=5, phase="traceroute")
+        _update_topo_state(progress=5)
+        _mark_topo_phase("traceroute")
         try:
             traceroute_data = topo.build_l3_topology(ips, local_ip)
         except Exception as e:
@@ -302,7 +360,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     # ── Phase 2: SNMP ─────────────────────────────────────────────────────────
     snmp_results: Dict[str, Dict] = {}
     if run_snmp:
-        _update_topo_state(phase="snmp")
+        _mark_topo_phase("snmp")
         snmp_err_count = 0
         for ip in ips:
             cfg = get_snmp_for_ip(ip)
@@ -323,7 +381,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     lldp_frames: List[Dict] = []
     dhcp_data:   Dict[str, Dict] = {}
     if run_passive:
-        _update_topo_state(phase="passive_sniff")
+        _mark_topo_phase("passive_sniff")
         lldp_sniffer = topo._LLDPSniffer()
         dhcp_sniffer = topo._DHCPSniffer()
         lldp_sniffer.start(duration=15)
@@ -338,7 +396,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     # ── Enrichment: mDNS ─────────────────────────────────────────────────────
     mdns_data: Dict[str, Dict] = {}
     if run_mdns:
-        _update_topo_state(phase="mdns")
+        _mark_topo_phase("mdns")
         listener = topo._MDNSListener()
         listener.start(duration=5)
         time.sleep(6)
@@ -349,7 +407,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     # ── Enrichment: SSDP ─────────────────────────────────────────────────────
     ssdp_data: List[Dict] = []
     if run_ssdp:
-        _update_topo_state(phase="ssdp")
+        _mark_topo_phase("ssdp")
         try:
             raw_ssdp = topo.ssdp_discover(timeout=3)
             # Optionally fetch UPnP descriptions for local-only IPs
@@ -366,7 +424,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     # ── Enrichment: NetBIOS ───────────────────────────────────────────────────
     netbios_results: Dict[str, str] = {}
     if run_netbios:
-        _update_topo_state(phase="netbios")
+        _mark_topo_phase("netbios")
         def _nb(ip):
             name = topo.netbios_query(ip)
             if name:
@@ -383,7 +441,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     # ── Enrichment: Banner grabbing ───────────────────────────────────────────
     fingerprint_data: Dict[str, Dict] = {}
     if run_banners:
-        _update_topo_state(phase="fingerprint")
+        _mark_topo_phase("fingerprint")
         def _fp(ip):
             fingerprint_data[ip] = topo.fingerprint_device(ip, max_workers=4)
         with ThreadPoolExecutor(max_workers=10) as ex:
@@ -391,7 +449,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
     _update_topo_state(progress=95)
 
     # ── Build unified graph ───────────────────────────────────────────────────
-    _update_topo_state(phase="build_graph")
+    _mark_topo_phase("build_graph")
     graph = topo.build_topology_graph(
         scan_devices      = scan_devices,
         traceroute_data   = traceroute_data,
@@ -422,6 +480,7 @@ def _run_topology_discovery_impl(scan_devices: List[Dict],
                 dev["type"] = node["type"]
     save_devices(devices)
 
+    _mark_topo_phase("")
     _update_topo_state(status="done", progress=100, phase="")
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
@@ -441,7 +500,13 @@ def get_topology():
 @app.route("/topology-status")
 def topology_status():
     with _topo_lock:
-        return jsonify(dict(_topo_state))
+        state = dict(_topo_state)
+    now = int(time.time() * 1000)
+    started = state.get("started_at_ms", 0)
+    phase_started = state.get("phase_started_at_ms", 0)
+    state["elapsed_ms"] = max(0, now - started) if started else 0
+    state["current_phase_elapsed_ms"] = max(0, now - phase_started) if phase_started else 0
+    return jsonify(state)
 
 @app.route("/run-topology", methods=["POST"])
 def trigger_topology():
@@ -496,17 +561,20 @@ def snmp_config_set():
     ip can be "*" for a wildcard (all devices).
     Community string is stored server-side only, never returned.
     """
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     ip   = data.get("ip", "").strip()
     community = data.get("community", "").strip()
-    port = int(data.get("port", 161))
+    try:
+        port = int(data.get("port", 161))
+    except (TypeError, ValueError):
+        return api_error("Invalid port", 400)
 
     if ip != "*" and not topo._valid_ip(ip):
-        return jsonify({"ok": False, "error": "Invalid IP"}), 400
+        return api_error("Invalid IP", 400)
     if not community:
-        return jsonify({"ok": False, "error": "Community string required"}), 400
+        return api_error("Community string required", 400)
     if not (1 <= port <= 65535):
-        return jsonify({"ok": False, "error": "Invalid port"}), 400
+        return api_error("Invalid port", 400)
 
     with _snmp_config_lock:
         _snmp_config[ip] = {"community": community, "port": port}
@@ -515,10 +583,10 @@ def snmp_config_set():
 
 @app.route("/snmp-config", methods=["DELETE"])
 def snmp_config_delete():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     ip   = data.get("ip", "").strip()
     if ip != "*" and not topo._valid_ip(ip):
-        return jsonify({"ok": False, "error": "Invalid IP"}), 400
+        return api_error("Invalid IP", 400)
     with _snmp_config_lock:
         _snmp_config.pop(ip, None)
     save_snmp_config()
@@ -529,27 +597,7 @@ def snmp_config_delete():
 def scan():
     local_ip   = get_local_ip()
     subnet     = get_subnet(local_ip)
-    arp_before = get_arp_table()
-    alive_ips  = ping_sweep(subnet)
-    arp_after  = get_arp_table()
-    arp_results = {**arp_before, **arp_after}
-
-    all_ips = set(list(arp_results.keys()) + alive_ips)
-    all_ips.discard(local_ip)
-
-    found: Dict[str, Dict] = {}
-    for ip in all_ips:
-        if not topo._valid_ip(ip):
-            continue
-        mac    = arp_results.get(ip, "")
-        vendor = lookup_vendor(mac) if mac else ""
-        host   = get_hostname(ip)
-        found[ip] = {"ip": ip, "mac": mac, "vendor": vendor, "hostname": host}
-
-    sorted_results = sorted(
-        found.values(),
-        key=lambda x: tuple(int(p) for p in x["ip"].split("."))
-    )
+    sorted_results = scan_subnet_devices(subnet, local_ip=local_ip)
     return jsonify({
         "subnet":   subnet,
         "local_ip": local_ip,
@@ -557,17 +605,97 @@ def scan():
         "devices":  sorted_results
     })
 
+@app.route("/scan-multi", methods=["POST"])
+def scan_multi():
+    data = request.get_json(silent=True) or {}
+    raw_subnets = data.get("subnets")
+    if not isinstance(raw_subnets, list) or not raw_subnets:
+        return api_error("subnets must be a non-empty list", 400)
+
+    seen = set()
+    subnets: List[str] = []
+    for raw in raw_subnets:
+        if not isinstance(raw, str):
+            return api_error("Each subnet must be a string", 400)
+        subnet = raw.strip()
+        if not subnet:
+            return api_error("Subnet values cannot be empty", 400)
+        if subnet in seen:
+            continue
+        seen.add(subnet)
+        subnets.append(subnet)
+
+    local_ip = get_local_ip()
+    merged_by_ip: Dict[str, Dict] = {}
+    merged_by_mac: Dict[str, Dict] = {}
+    subnet_results: List[Dict] = []
+
+    for subnet in subnets:
+        result = {"subnet": subnet, "count": 0, "errors": []}
+        if not topo._safe_subnet(subnet):
+            result["errors"].append("Invalid subnet format; expected a.b.c")
+            subnet_results.append(result)
+            continue
+        try:
+            devices = scan_subnet_devices(subnet, local_ip=local_ip if subnet == get_subnet(local_ip) else "")
+            result["count"] = len(devices)
+            for dev in devices:
+                mac = (dev.get("mac") or "").strip().upper()
+                ip = (dev.get("ip") or "").strip()
+                if mac:
+                    if mac in merged_by_mac:
+                        existing = merged_by_mac[mac]
+                        if not existing.get("hostname") and dev.get("hostname"):
+                            existing["hostname"] = dev["hostname"]
+                        if not existing.get("vendor") and dev.get("vendor"):
+                            existing["vendor"] = dev["vendor"]
+                        if not existing.get("ip") and ip:
+                            existing["ip"] = ip
+                    else:
+                        merged_by_mac[mac] = dict(dev)
+                elif ip:
+                    if ip in merged_by_ip:
+                        existing = merged_by_ip[ip]
+                        if not existing.get("hostname") and dev.get("hostname"):
+                            existing["hostname"] = dev["hostname"]
+                        if not existing.get("vendor") and dev.get("vendor"):
+                            existing["vendor"] = dev["vendor"]
+                    else:
+                        merged_by_ip[ip] = dict(dev)
+        except Exception as e:
+            result["errors"].append(str(e))
+        subnet_results.append(result)
+
+    for dev in merged_by_mac.values():
+        ip = (dev.get("ip") or "").strip()
+        if ip and ip in merged_by_ip:
+            merged_by_ip.pop(ip, None)
+
+    merged_devices = list(merged_by_mac.values()) + list(merged_by_ip.values())
+    merged_devices = sorted(
+        merged_devices,
+        key=lambda x: tuple(int(p) for p in x.get("ip", "999.999.999.999").split(".")) if topo._valid_ip(x.get("ip", "")) else (999, 999, 999, 999)
+    )
+
+    return jsonify({
+        "subnets_requested": subnets,
+        "subnet_results": subnet_results,
+        "count": len(merged_devices),
+        "devices": merged_devices,
+        "local_ip": local_ip,
+    })
+
 # ── DEVICE CRUD ───────────────────────────────────────────────────────────────
 @app.route("/save", methods=["POST"])
 def save_one():
-    data   = request.get_json()
+    data   = request.get_json(silent=True) or {}
     device = data.get("device")
     mac    = data.get("mac")
-    if not device:
-        return jsonify({"ok": False, "error": "No device provided"}), 400
+    if not isinstance(device, dict):
+        return api_error("No device provided", 400)
     ip = device.get("ip", "")
     if ip and not topo._valid_ip(ip):
-        return jsonify({"ok": False, "error": "Invalid IP"}), 400
+        return api_error("Invalid IP", 400)
     devices = load_devices()
     idx     = find_device_index(devices, mac=mac, ip=ip or None)
     if idx >= 0:
@@ -579,24 +707,32 @@ def save_one():
 
 @app.route("/save-all", methods=["POST"])
 def save_all():
-    devices = request.get_json()
+    devices = request.get_json(silent=True)
     if not isinstance(devices, list):
-        return jsonify({"ok": False, "error": "Expected a list"}), 400
+        return api_error("Expected a list", 400)
+    for item in devices:
+        if not isinstance(item, dict):
+            return api_error("Each device must be an object", 400)
+        ip = item.get("ip", "")
+        if ip and not topo._valid_ip(ip):
+            return api_error("Invalid IP in device list", 400)
     save_devices(devices)
     return jsonify({"ok": True})
 
 @app.route("/delete-device", methods=["POST"])
 def delete_device():
-    data    = request.get_json()
+    data    = request.get_json(silent=True) or {}
     mac     = data.get("mac")
     ip      = data.get("ip")
+    if not mac and not ip:
+        return api_error("Provide mac or ip", 400)
     devices = load_devices()
     idx     = find_device_index(devices, mac=mac, ip=ip)
     if idx >= 0:
         devices.pop(idx)
         save_devices(devices)
         return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "Device not found"}), 404
+    return api_error("Device not found", 404)
 
 # ── VERSION + AUTO-UPDATE ─────────────────────────────────────────────────────
 def parse_version(v: str):

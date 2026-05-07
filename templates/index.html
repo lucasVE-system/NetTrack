@@ -484,6 +484,31 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
 .topo-opts-label { letter-spacing: 1px; margin-right: 0.25rem; color: var(--text); }
 .topo-opt { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none; }
 .topo-opt input { accent-color: var(--accent2); width: 12px; height: 12px; }
+.scan-opts-bar {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.35rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(7,11,18,0.92);
+}
+.scan-opts-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+}
+#multiSubnetInput {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--bright);
+    padding: 0.35rem 0.5rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    border-radius: 3px;
+}
 .legend-enrich {
     margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border);
     font-size: 0.58rem; color: var(--text-dim); line-height: 1.3;
@@ -507,6 +532,11 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
         <div class="stat">VERSION <span id="hVersion">—</span></div>
     </div>
 </header>
+
+<div class="scan-opts-bar">
+    <div class="scan-opts-label">SCAN SUBNETS (OPTIONAL, COMMA/SPACE/NEWLINE)</div>
+    <input type="text" id="multiSubnetInput" placeholder="192.168.1, 10.0.0">
+</div>
 
 <!-- Update Modal -->
 <div id="updateOverlay">
@@ -700,6 +730,11 @@ let selectedIdx = null;
 let dragNode    = null, dragOffX = 0, dragOffY = 0, dragMoved = false;
 let currentView = 'star';    // 'star' | 'tree' | 'force'
 let forceAnim   = null;
+
+function parseSubnetInput() {
+    const raw = document.getElementById('multiSubnetInput')?.value || '';
+    return [...new Set(raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean))];
+}
 
 const ICONS = {
     router:   '🌐',
@@ -1034,7 +1069,8 @@ function createNode(device, x, y, index) {
         </div>`;
 
     el.addEventListener('mousedown', e => {
-        dragNode  = { index, el };
+        const liveIndex = nodes.findIndex(n => n.el === el);
+        dragNode  = { index: liveIndex, el };
         dragMoved = false;
         const rect     = el.getBoundingClientRect();
         const wrapRect = wrap.getBoundingClientRect();
@@ -1047,7 +1083,7 @@ function createNode(device, x, y, index) {
 }
 
 document.getElementById('mapWrap').addEventListener('mousemove', e => {
-    if (!dragNode) return;
+    if (!dragNode || dragNode.index < 0 || !nodes[dragNode.index]) return;
     dragMoved = true;
     const wrapRect = document.getElementById('mapWrap').getBoundingClientRect();
     const x = e.clientX - wrapRect.left - dragOffX;
@@ -1061,7 +1097,7 @@ document.getElementById('mapWrap').addEventListener('mousemove', e => {
 
 document.getElementById('mapWrap').addEventListener('mouseup', () => {
     if (!dragNode) return;
-    if (!dragMoved) selectNode(dragNode.index);
+    if (!dragMoved && dragNode.index >= 0 && nodes[dragNode.index]) selectNode(dragNode.index);
     dragNode = null; dragMoved = false;
 });
 
@@ -1208,8 +1244,12 @@ function toast(msg) {
 async function runScan() {
     const overlay = document.getElementById('scanOverlay');
     const btn     = document.getElementById('rescanBtn');
+    const manualSubnets = parseSubnetInput();
+    const useMulti = manualSubnets.length > 1;
     document.getElementById('scanLabel').textContent = 'Scanning Network';
-    document.getElementById('scanSub').textContent   = 'ARP + ping sweep in progress...';
+    document.getElementById('scanSub').textContent   = useMulti
+        ? `Scanning ${manualSubnets.length} subnets sequentially...`
+        : 'ARP + ping sweep in progress...';
     document.getElementById('scanProgressWrap').style.display = 'none';
     overlay.style.display = 'flex';
     btn.disabled = true;
@@ -1217,19 +1257,44 @@ async function runScan() {
     nodes = []; topoEdges = [];
     closePanel();
 
-    const [scanRes, savedRes, topoRes] = await Promise.all([
-        fetch('/scan'), fetch('/devices'), fetch('/topology')
-    ]);
-    const scanData  = await scanRes.json();
-    const savedData = await savedRes.json();
-    const topoData  = await topoRes.json();
+    let scanData, savedData, topoData;
+    try {
+        const scanPromise = useMulti
+            ? fetch('/scan-multi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subnets: manualSubnets })
+            })
+            : fetch('/scan');
+        const [scanRes, savedRes, topoRes] = await Promise.all([
+            scanPromise, fetch('/devices'), fetch('/topology')
+        ]);
+        if (!scanRes.ok || !savedRes.ok || !topoRes.ok) {
+            throw new Error('One or more API requests failed');
+        }
+        scanData  = await scanRes.json();
+        savedData = await savedRes.json();
+        topoData  = await topoRes.json();
+    } catch (e) {
+        overlay.style.display = 'none';
+        btn.disabled = false;
+        toast('✗ Scan failed');
+        return;
+    }
 
     const cleanDevices = scanData.devices.filter(d => !isNoiseDevice(d));
     const tagged = cleanDevices.map(d => ({
         ...d, randomized: isMacRandomized(d.mac)
     }));
 
-    document.getElementById('hSubnet').textContent  = scanData.subnet + '.0/24';
+    if (useMulti) {
+        const requested = Array.isArray(scanData.subnets_requested)
+            ? scanData.subnets_requested
+            : manualSubnets;
+        document.getElementById('hSubnet').textContent = `${requested.length} subnets`;
+    } else {
+        document.getElementById('hSubnet').textContent = scanData.subnet + '.0/24';
+    }
     document.getElementById('hCount').textContent   = tagged.length;
     document.getElementById('hRandom').textContent  = tagged.filter(d => d.randomized).length;
 
@@ -1291,11 +1356,22 @@ async function runScan() {
         layoutNodes(devices);
     }
 
-    await fetch('/save-all', {
+    const saveAllRes = await fetch('/save-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(devices)
     });
+    if (!saveAllRes.ok) {
+        toast('⚠ Inventory sync failed');
+    }
+    if (useMulti && Array.isArray(scanData.subnet_results)) {
+        const problems = scanData.subnet_results
+            .filter(s => Array.isArray(s.errors) && s.errors.length)
+            .map(s => `${s.subnet}: ${s.errors[0]}`);
+        if (problems.length) {
+            toast('⚠ ' + problems.slice(0, 2).join(' · ') + (problems.length > 2 ? '…' : ''));
+        }
+    }
 
     overlay.style.display = 'none';
     btn.disabled = false;
@@ -1524,5 +1600,7 @@ async function startUpdate() {
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('load',   () => { resizeCanvas(); runScan(); checkForUpdate(); });
 </script>
+<script src="/static/js/scan.js"></script>
+<script src="/static/js/topology.js"></script>
 </body>
 </html>

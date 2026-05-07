@@ -37,3 +37,12 @@ __pycache__/
 launcher.build/
 launcher.dist/
 launcher.onefile-build/
+
+# Cursor local metadata
+.cursor/
+
+# Local runtime/private app data
+devices.json
+topology.json
+snmp_config.json
+debug-*.log

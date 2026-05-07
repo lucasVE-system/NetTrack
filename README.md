@@ -35,6 +35,14 @@ Local network inventory and topology mapping. The web UI listens on **127.0.0.1*
 - SNMP communities are never echoed to the frontend
 - Update downloads are validated against a hardcoded host/path allowlist
 
+## Safe Push Guardrails
+
+- Run a local secret scan before pushing:
+  - `python scripts/secret_scan.py`
+- Optional Git hook setup (runs scanner automatically on push):
+  - `git config core.hooksPath .githooks`
+- Local runtime files are ignored by git (`devices.json`, `topology.json`, `snmp_config.json`, debug logs).
+
 ## License
 
 Source-available — free for personal and non-commercial use. Commercial use requires a separate license. See [`LICENSE`](LICENSE) for full terms.
