@@ -20,6 +20,7 @@ def main() -> int:
         return 1
 
     hidden = [
+      "dns_sniffer", 
         "app",
         "topology",
         "version",
