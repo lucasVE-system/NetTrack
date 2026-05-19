@@ -1,12 +1,22 @@
 """
 dns_sniffer.py  –  NetTrack DNS monitor
 =========================================
-Passive DNS query sniffer.  Listens on UDP port 53 via a raw socket and
-logs which domain names each device on the LAN queries.
+Passive DNS query sniffer.  Captures DNS queries (port 53) and logs
+which domain names each device on the LAN queries.
 
-Design mirrors _DHCPSniffer in topology.py exactly:
+Platform strategy
+-----------------
+Windows:  SOCK_RAW + IPPROTO_IP + SIO_RCVALL (promiscuous mode).
+          Plain SOCK_RAW/IPPROTO_UDP on Windows only captures inbound
+          traffic, missing all locally-generated DNS queries.
+          SIO_RCVALL captures everything on the NIC including outbound.
+Linux:    SOCK_RAW + IPPROTO_UDP (standard; sees all traffic on the wire).
+
+Both paths require elevated privileges (admin / CAP_NET_RAW).
+Falls back silently with available=False if permission is denied.
+
+Design mirrors _DHCPSniffer in topology.py:
   * Pure stdlib – no third-party deps.
-  * Raw socket; falls back silently on PermissionError (no admin).
   * Per-IP ring buffer (default 1 000 entries) so memory is bounded.
   * Thread-safe: all shared state guarded by a single Lock.
   * Persistent: snapshots ring buffer to disk on stop (rolling 24 h).
@@ -263,20 +273,21 @@ class DNSSniffer:
 
     def start(self) -> bool:
         """
-        Open a raw UDP socket and start the capture thread.
-        Returns True if the socket was opened successfully.
-        On PermissionError (no admin) sets self.available = False and returns False.
-        Safe to call multiple times; subsequent calls are no-ops if already running.
+        Open a raw socket and start the capture thread.
+        Returns True if started successfully, False on permission error.
+        Safe to call multiple times; no-op if already running.
         """
         if self._running:
             return self.available
 
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
-            s.settimeout(1.0)
-            self._sock      = s
-            self._running   = True
-            self.available  = True
+            if sys.platform == "win32":
+                self._sock = self._open_win_socket()
+            else:
+                self._sock = self._open_linux_socket()
+
+            self._running  = True
+            self.available = True
         except PermissionError:
             self.available = False
             return False
@@ -288,9 +299,53 @@ class DNSSniffer:
         self._thread.start()
         return True
 
+    def _open_win_socket(self) -> socket.socket:
+        """
+        Windows: SOCK_RAW + IPPROTO_IP + SIO_RCVALL.
+        SIO_RCVALL puts the NIC in promiscuous mode so we see both
+        inbound AND outbound packets — required to capture locally
+        generated DNS queries which IPPROTO_UDP misses on Windows.
+        """
+        # Bind to the primary local IP so Windows knows which interface.
+        local_ip = self._get_local_ip()
+        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
+        s.bind((local_ip, 0))
+        s.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+        # SIO_RCVALL = 0x98000001
+        SIO_RCVALL  = 0x98000001
+        RCVALL_ON   = 1
+        s.ioctl(SIO_RCVALL, RCVALL_ON)
+        s.settimeout(1.0)
+        return s
+
+    def _open_linux_socket(self) -> socket.socket:
+        """Linux: SOCK_RAW + IPPROTO_UDP sees all UDP traffic."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_UDP)
+        s.settimeout(1.0)
+        return s
+
+    @staticmethod
+    def _get_local_ip() -> str:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
+
     def stop(self) -> None:
         """Stop capture thread and flush log to disk."""
         self._running = False
+        if sys.platform == "win32" and self._sock:
+            try:
+                # Disable promiscuous mode before closing
+                SIO_RCVALL  = 0x98000001
+                RCVALL_OFF  = 0
+                self._sock.ioctl(SIO_RCVALL, RCVALL_OFF)
+            except Exception:
+                pass
         if self._thread:
             self._thread.join(timeout=3)
             self._thread = None
@@ -307,18 +362,22 @@ class DNSSniffer:
     def _run(self) -> None:
         while self._running:
             try:
-                data, addr = self._sock.recvfrom(4096)
-                self._parse_packet(data, addr[0])
+                data, addr = self._sock.recvfrom(65535)
+                # On Windows with SIO_RCVALL, addr[0] is the src IP from
+                # the IP header — but we parse the header ourselves anyway
+                # so we get the correct src IP regardless of platform.
+                self._parse_packet(data)
             except socket.timeout:
                 continue
             except Exception:
                 break
         self._running = False
 
-    def _parse_packet(self, data: bytes, src_ip: str) -> None:
+    def _parse_packet(self, data: bytes) -> None:
         """
-        data is a raw IP packet (including IP + UDP headers).
-        Extract the UDP payload and hand it to the DNS parser.
+        Parse a raw IP packet (IP header + payload).
+        Extracts src IP, then checks for UDP dst port 53.
+        Works identically on Windows (SIO_RCVALL) and Linux (IPPROTO_UDP).
         """
         try:
             if len(data) < 20:
@@ -327,11 +386,12 @@ class DNSSniffer:
             proto = data[9]
             if proto != 17:          # UDP only
                 return
+            # Extract source IP from IP header bytes 12-16
+            src_ip = socket.inet_ntoa(data[12:16])
             udp_off = ihl
             if len(data) < udp_off + 8:
                 return
             dst_port = struct.unpack("!H", data[udp_off + 2: udp_off + 4])[0]
-            src_port = struct.unpack("!H", data[udp_off + 0: udp_off + 2])[0]
             # Only care about DNS queries sent TO port 53
             if dst_port != 53:
                 return
