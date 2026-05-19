@@ -30,6 +30,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
+from dns_sniffer import DNSSniffer
 
 from flask import Flask, jsonify, render_template, request
 from version import VERSION, GITHUB_REPO
@@ -592,6 +593,55 @@ def snmp_config_delete():
     save_snmp_config()
     return jsonify({"ok": True})
 
+# ── DNS MONITOR ───────────────────────────────────────────────────────────────
+
+@app.route("/dns-start", methods=["POST"])
+def dns_start():
+    if _dns_sniffer._running:
+        return jsonify({"ok": True, "available": True, "already_running": True})
+    ok = _dns_sniffer.start()
+    return jsonify({"ok": ok, "available": ok, "already_running": False})
+
+@app.route("/dns-stop", methods=["POST"])
+def dns_stop():
+    _dns_sniffer.stop()
+    return jsonify({"ok": True})
+
+@app.route("/dns-log")
+def dns_log():
+    ip_filter = request.args.get("ip", "").strip() or None
+    if ip_filter and not topo._valid_ip(ip_filter):
+        return api_error("Invalid IP", 400)
+    try:
+        limit = int(request.args.get("limit", 200))
+    except (TypeError, ValueError):
+        return api_error("limit must be an integer", 400)
+    entries = _dns_sniffer.get_log(ip=ip_filter, limit=limit)
+    return jsonify({
+        "running":   _dns_sniffer._running,
+        "available": _dns_sniffer.available,
+        "entries":   entries,
+    })
+
+@app.route("/dns-stats")
+def dns_stats():
+    ip_filter = request.args.get("ip", "").strip() or None
+    if ip_filter and not topo._valid_ip(ip_filter):
+        return api_error("Invalid IP", 400)
+    stats = _dns_sniffer.get_stats(ip=ip_filter)
+    stats["running"]   = _dns_sniffer._running
+    stats["available"] = _dns_sniffer.available
+    return jsonify(stats)
+
+@app.route("/dns-clear", methods=["POST"])
+def dns_clear():
+    data      = request.get_json(silent=True) or {}
+    ip_filter = data.get("ip", "").strip() or None
+    if ip_filter and not topo._valid_ip(ip_filter):
+        return api_error("Invalid IP", 400)
+    _dns_sniffer.clear(ip=ip_filter)
+    return jsonify({"ok": True})
+
 # ── SCAN ──────────────────────────────────────────────────────────────────────
 @app.route("/scan")
 def scan():
@@ -878,6 +928,7 @@ def do_update():
 
 # ── STARTUP ───────────────────────────────────────────────────────────────────
 load_snmp_config()
+_dns_sniffer = DNSSniffer(get_base_dir())
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=False)
