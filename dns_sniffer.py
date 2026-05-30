@@ -1,34 +1,9 @@
 """
-dns_sniffer.py  –  NetTrack DNS monitor
-=========================================
-Passive DNS query sniffer.  Captures DNS queries (port 53) and logs
-which domain names each device on the LAN queries.
+dns_sniffer.py – NetTrack passive DNS monitor.
 
-Platform strategy
------------------
-Windows:  SOCK_RAW + IPPROTO_IP + SIO_RCVALL (promiscuous mode).
-          Plain SOCK_RAW/IPPROTO_UDP on Windows only captures inbound
-          traffic, missing all locally-generated DNS queries.
-          SIO_RCVALL captures everything on the NIC including outbound.
-Linux:    SOCK_RAW + IPPROTO_UDP (standard; sees all traffic on the wire).
-
-Both paths require elevated privileges (admin / CAP_NET_RAW).
-Falls back silently with available=False if permission is denied.
-
-Design mirrors _DHCPSniffer in topology.py:
-  * Pure stdlib – no third-party deps.
-  * Per-IP ring buffer (default 1 000 entries) so memory is bounded.
-  * Thread-safe: all shared state guarded by a single Lock.
-  * Persistent: snapshots ring buffer to disk on stop (rolling 24 h).
-  * Domain category lookup via a simple suffix-match dict.
-
-Security notes
---------------
-* Only domain names are captured – not URLs, not TLS payloads.
-* Source IP used only to attribute queries to known devices; never
-  used as a subprocess argument or stored in any shared config.
-* Log file written atomically (tmp + os.replace).
-* No DNS responses are sent or modified.
+Captures port-53 queries and logs which domains each LAN device queries.
+Windows uses SOCK_RAW + SIO_RCVALL; Linux uses SOCK_RAW + IPPROTO_UDP.
+Both require admin/CAP_NET_RAW; falls back silently if permission is denied.
 """
 
 from __future__ import annotations

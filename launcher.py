@@ -15,15 +15,30 @@ else:
 
 import threading
 import time
+import urllib.request
 
 import app
+
 
 def start_flask():
     app.app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False, threaded=True)
 
+
+def wait_for_flask(timeout: float = 10.0) -> bool:
+    """Poll until Flask responds or timeout expires."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen("http://127.0.0.1:5000/", timeout=0.5)
+            return True
+        except Exception:
+            time.sleep(0.1)
+    return False
+
+
 if __name__ == "__main__":
     threading.Thread(target=start_flask, daemon=True).start()
-    time.sleep(1.5)
+    wait_for_flask()
 
     import webview
     webview.create_window(
@@ -34,3 +49,6 @@ if __name__ == "__main__":
         min_size=(900, 600),
     )
     webview.start()
+
+    # Clean up before exit
+    app._dns_sniffer.stop()

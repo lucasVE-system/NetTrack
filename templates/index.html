@@ -513,16 +513,87 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
     margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border);
     font-size: 0.58rem; color: var(--text-dim); line-height: 1.3;
 }
+
+/* ── SVG ICONS ── */
+.node-icon svg {
+    width: 28px; height: 28px;
+    color: var(--accent);
+    pointer-events: none;
+}
+.node.infra .node-icon svg    { color: var(--lldp); }
+.node.randomized .node-icon svg { color: var(--warn); }
+.node:hover .node-icon svg, .node.selected .node-icon svg { color: var(--bright); }
+.device-icon-lg svg { width: 32px; height: 32px; color: var(--accent); }
+
+/* ── TOPOLOGY-ONLY (HOP) NODES ── */
+.node.topo-only .node-icon {
+    opacity: 0.55; border-style: dashed; border-color: var(--text-dim);
+    background: rgba(7,11,18,0.6);
+}
+.node.topo-only .node-label { opacity: 0.65; }
+.node-badge-hop {
+    font-family: 'Share Tech Mono', monospace; font-size: 0.5rem;
+    letter-spacing: 1px; padding: 0.1rem 0.3rem; border-radius: 2px;
+    background: rgba(42,64,85,0.4); color: var(--text-dim);
+    border: 1px solid rgba(42,64,85,0.8);
+}
+
+/* ── EXPORT DROPDOWN ── */
+.export-wrap { position: relative; }
+.export-drop {
+    display: none; position: absolute; top: calc(100% + 5px); left: 0;
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 3px; min-width: 170px; z-index: 300;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+.export-drop.open { display: block; }
+.export-drop-item {
+    padding: 0.5rem 0.75rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 1px;
+    color: var(--text); cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s, color 0.15s;
+    display: flex; align-items: center; gap: 0.5rem;
+}
+.export-drop-item:last-child { border-bottom: none; }
+.export-drop-item:hover { background: var(--surface2); color: var(--accent); }
+.export-drop-label { font-size: 0.55rem; color: var(--text-dim); letter-spacing: 0; }
+
+/* ── LVE MARK ── */
+.lve-mark {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.52rem; letter-spacing: 3px;
+    color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: 2px; padding: 0.1rem 0.35rem;
+    margin-left: 0.5rem; vertical-align: middle;
+    opacity: 0.7;
+}
 </style>
 </head>
 <body>
 
 <header>
-    <div class="logo"><div class="logo-dot"></div>NETTRACK</div>
+    <div class="logo"><div class="logo-dot"></div>NETTRACK<span class="lve-mark">LVE</span></div>
     <div class="toolbar">
         <button class="btn btn-accent" id="rescanBtn" onclick="runScan()">⟳ Rescan</button>
         <button class="btn btn-primary" id="topoBtn" onclick="runTopology()">⬡ Map Topology</button>
         <button class="btn btn-dim" onclick="openSnmpModal()">⚙ SNMP</button>
+        <button class="btn btn-dim" id="saveAllBtn" onclick="saveAll()">↓ Save</button>
+        <div class="export-wrap">
+            <button class="btn btn-dim" onclick="toggleExportDrop(event)">↑ Export</button>
+            <div class="export-drop" id="exportDrop">
+                <div class="export-drop-item" onclick="exportCSV()">
+                    <span>CSV</span>
+                    <span class="export-drop-label">device list spreadsheet</span>
+                </div>
+                <div class="export-drop-item" onclick="exportJSON()">
+                    <span>JSON</span>
+                    <span class="export-drop-label">full data + topology</span>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="header-stats">
         <div class="stat">SUBNET <span id="hSubnet">—</span></div>
@@ -615,7 +686,6 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
     <!-- Legend -->
     <div class="legend" id="legendBox" style="display:none">
         <div class="legend-item"><div class="legend-line" style="background:var(--lldp)"></div>LLDP</div>
-        <div class="legend-item"><div class="legend-line" style="background:var(--cdp)"></div>CDP</div>
         <div class="legend-item"><div class="legend-line" style="background:var(--accent);opacity:0.5"></div>L3 Hop</div>
         <div class="legend-item"><div class="legend-line" style="background:var(--inferred);border:1px dashed var(--border)"></div>Inferred</div>
         <div class="legend-enrich" id="legendEnrich" style="display:none"></div>
@@ -645,7 +715,7 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
         </div>
         <div class="panel-body">
             <div class="device-header">
-                <div class="device-icon-lg" id="p-icon">📡</div>
+                <div class="device-icon-lg" id="p-icon"></div>
                 <div>
                     <div class="device-meta-ip"    id="p-ip-display">—</div>
                     <div class="device-meta-vendor" id="p-vendor-display">—</div>
@@ -736,20 +806,23 @@ function parseSubnetInput() {
     return [...new Set(raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean))];
 }
 
+function _svg(body) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+}
 const ICONS = {
-    router:   '🌐',
-    switch:   '🔀',
-    ap:       '📶',
-    firewall: '🛡️',
-    server:   '🖥️',
-    pc:       '🖥️',
-    laptop:   '💻',
-    phone:    '📱',
-    iot:      '💡',
-    printer:  '🖨️',
-    nas:      '💾',
-    camera:   '📷',
-    other:    '📡'
+    router:   _svg(`<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8"/><path d="M12 3c-2 4-2 14 0 18"/><path d="M12 3c2 4 2 14 0 18"/>`),
+    switch:   _svg(`<rect x="2" y="7" width="20" height="10" rx="2"/><circle cx="7" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/><line x1="4" y1="7" x2="4" y2="4"/><line x1="8" y1="7" x2="8" y2="4"/>`),
+    ap:       _svg(`<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>`),
+    firewall: _svg(`<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>`),
+    server:   _svg(`<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="18" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="18" cy="18" r="1" fill="currentColor" stroke="none"/><line x1="6" y1="6" x2="10" y2="6"/><line x1="6" y1="18" x2="10" y2="18"/>`),
+    pc:       _svg(`<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><line x1="6" y1="8" x2="10" y2="8"/><line x1="6" y1="11" x2="14" y2="11"/>`),
+    laptop:   _svg(`<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/><line x1="7" y1="9" x2="11" y2="9"/><line x1="7" y1="12" x2="15" y2="12"/>`),
+    phone:    _svg(`<rect x="5" y="2" width="14" height="20" rx="3"/><circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/><line x1="9" y1="6" x2="15" y2="6"/>`),
+    iot:      _svg(`<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>`),
+    printer:  _svg(`<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>`),
+    nas:      _svg(`<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><line x1="12" y1="8" x2="12" y2="11"/>`),
+    camera:   _svg(`<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>`),
+    other:    _svg(`<path d="M5.07 5.07a10 10 0 0 0 0 13.86"/><path d="M8.9 8.9a5 5 0 0 0 0 6.2"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><path d="M15.1 8.9a5 5 0 0 0 0 6.2"/><path d="M18.93 5.07a10 10 0 0 0 0 13.86"/>`)
 };
 
 const INFRA_TYPES = new Set(['router','switch','ap','firewall','server']);
@@ -787,8 +860,8 @@ const EDGE_STYLES = {
     lldp:          { color: 'rgba(167,139,250,0.65)', width: 2, dash: [] },
     lldp_passive:  { color: 'rgba(167,139,250,0.4)',  width: 1.5, dash: [4,6] },
     cdp:           { color: 'rgba(251,146,60,0.65)',  width: 2, dash: [] },
-    l3_hop:        { color: 'rgba(0,212,255,0.35)',   width: 1.5, dash: [3,5] },
-    inferred_star: { color: 'rgba(26,40,64,0.9)',     width: 1.5, dash: [4,7] },
+    l3_hop:        { color: 'rgba(0,212,255,0.45)',   width: 1.5, dash: [3,5] },
+    inferred_star: { color: 'rgba(0,212,255,0.18)',  width: 1.5, dash: [4,7] },
 };
 
 function edgeStyle(type, selected) {
@@ -840,8 +913,8 @@ function drawStarFallback() {
         ctx.moveTo(gw.x, gw.y);
         ctx.lineTo(n.x, n.y);
         ctx.strokeStyle = selected
-            ? (n.device.randomized ? 'rgba(255,200,0,0.4)' : 'rgba(0,212,255,0.4)')
-            : 'rgba(26,40,64,0.8)';
+            ? (n.device.randomized ? 'rgba(255,200,0,0.5)' : 'rgba(0,212,255,0.5)')
+            : 'rgba(0,212,255,0.15)';
         ctx.lineWidth   = selected ? 2 : 1.5;
         ctx.setLineDash([4,7]);
         ctx.stroke();
@@ -884,21 +957,19 @@ function layoutStar(list) {
 }
 
 function layoutTree(list) {
+    // Without topology edges there's no tree to show — use star instead
+    if (topoEdges.length === 0) return layoutStar(list);
+
     const wrap = document.getElementById('mapWrap');
     const W = wrap.offsetWidth, H = wrap.offsetHeight;
     nodes = [];
 
     // Build adjacency from topoEdges
-    const adj = {};   // ip -> [child_ips]
-    const inDeg = {};
-    list.forEach(d => { adj[d.ip] = []; inDeg[d.ip] = 0; });
-
+    const adj = {};
+    list.forEach(d => { adj[d.ip] = []; });
     topoEdges.forEach(e => {
         if (adj[e.src] !== undefined && adj[e.dst] !== undefined) {
-            if (!adj[e.src].includes(e.dst)) {
-                adj[e.src].push(e.dst);
-                inDeg[e.dst] = (inDeg[e.dst] || 0) + 1;
-            }
+            if (!adj[e.src].includes(e.dst)) adj[e.src].push(e.dst);
         }
     });
 
@@ -918,9 +989,10 @@ function layoutTree(list) {
         layers[ip] = depth;
         (adj[ip] || []).forEach(c => queue.push([c, depth + 1]));
     }
-    // Unvisited nodes go in layer 1 (connect to root visually)
+    // Unvisited nodes spread across layers proportionally
+    let nextLayer = 1;
     list.forEach(d => {
-        if (layers[d.ip] === undefined) layers[d.ip] = 1;
+        if (layers[d.ip] === undefined) layers[d.ip] = nextLayer++ % 3 + 1;
     });
 
     const maxLayer = Math.max(...Object.values(layers));
@@ -931,14 +1003,20 @@ function layoutTree(list) {
     });
 
     const positions = {};
-    const PADDING_X = 80, PADDING_Y = 80;
+    const PADDING_X = 72, PADDING_Y = 72;
+    const ROW_CAP = 7; // max nodes per visual row before wrapping
     for (let l = 0; l <= maxLayer; l++) {
-        const ips    = layerNodes[l] || [];
-        const count  = ips.length;
-        const y      = PADDING_Y + (l / Math.max(maxLayer, 1)) * (H - PADDING_Y * 2);
-        ips.forEach((ip, i) => {
-            const x = PADDING_X + ((i + 0.5) / count) * (W - PADDING_X * 2);
-            positions[ip] = { x, y };
+        const ips   = layerNodes[l] || [];
+        const baseY = PADDING_Y + (l / Math.max(maxLayer, 1)) * (H - PADDING_Y * 2);
+        // Split into sub-rows when a layer has many nodes
+        const rows  = [];
+        for (let i = 0; i < ips.length; i += ROW_CAP) rows.push(ips.slice(i, i + ROW_CAP));
+        rows.forEach((row, ri) => {
+            const rowY = baseY + ri * 76;
+            row.forEach((ip, i) => {
+                const x = PADDING_X + ((i + 0.5) / row.length) * (W - PADDING_X * 2);
+                positions[ip] = { x, y: rowY };
+            });
         });
     }
 
@@ -1041,13 +1119,15 @@ function setView(v) {
 // ── NODE CREATION ─────────────────────────────────────────────────────────────
 function createNode(device, x, y, index) {
     const wrap       = document.getElementById('mapWrap');
-    const randomized = isMacRandomized(device.mac);
-    const isInfra    = INFRA_TYPES.has(device.type);
-    const el         = document.createElement('div');
+    const randomized  = isMacRandomized(device.mac);
+    const isInfra     = INFRA_TYPES.has(device.type);
+    const isTopoOnly  = !!device._topology_only;
+    const el          = document.createElement('div');
     let cls = 'node';
-    if (randomized) cls += ' randomized';
-    if (isInfra)    cls += ' infra';
-    el.className     = cls;
+    if (randomized)  cls += ' randomized';
+    if (isInfra)     cls += ' infra';
+    if (isTopoOnly)  cls += ' topo-only';
+    el.className      = cls;
     el.style.left    = x + 'px';
     el.style.top     = y + 'px';
     el.dataset.index = index;
@@ -1059,12 +1139,12 @@ function createNode(device, x, y, index) {
     el.innerHTML = `
         <div class="node-body">
             <div class="node-icon">
-                ${ICONS[device.type] || '📡'}
+                ${ICONS[device.type] || _svg(`<circle cx="12" cy="12" r="9"/>`)}
                 <div class="${pingClass}"></div>
             </div>
             <div class="node-label">${label}</div>
             <div class="node-ip">${device.ip || ''}</div>
-            ${randomized ? '<div class="node-badge">RAND</div>' : ''}
+            ${isTopoOnly ? '<div class="node-badge-hop">HOP</div>' : (randomized ? '<div class="node-badge">RAND</div>' : '')}
             ${services   ? `<div class="node-services">${services}</div>` : ''}
         </div>`;
 
@@ -1072,10 +1152,9 @@ function createNode(device, x, y, index) {
         const liveIndex = nodes.findIndex(n => n.el === el);
         dragNode  = { index: liveIndex, el };
         dragMoved = false;
-        const rect     = el.getBoundingClientRect();
         const wrapRect = wrap.getBoundingClientRect();
-        dragOffX = e.clientX - (rect.left + rect.width/2  - wrapRect.left);
-        dragOffY = e.clientY - (rect.top  + rect.height/2 - wrapRect.top);
+        dragOffX = (e.clientX - wrapRect.left) - nodes[liveIndex].x;
+        dragOffY = (e.clientY - wrapRect.top)  - nodes[liveIndex].y;
         e.stopPropagation(); e.preventDefault();
     });
     wrap.appendChild(el);
@@ -1107,6 +1186,11 @@ document.getElementById('mapWrap').addEventListener('mousedown', e => {
     }
 });
 
+// Release drag even when mouse leaves the map area
+document.addEventListener('mouseup', () => {
+    dragNode = null; dragMoved = false;
+});
+
 // ── PANEL ─────────────────────────────────────────────────────────────────────
 function selectNode(index) {
     if (selectedIdx !== null && nodes[selectedIdx]) {
@@ -1119,7 +1203,7 @@ function selectNode(index) {
     const d          = nodes[index].device;
     const randomized = isMacRandomized(d.mac);
 
-    document.getElementById('p-icon').textContent           = ICONS[d.type] || '📡';
+    document.getElementById('p-icon').innerHTML             = ICONS[d.type] || _svg(`<circle cx="12" cy="12" r="9"/>`);
     document.getElementById('p-ip-display').textContent     = d.ip || '—';
     document.getElementById('p-vendor-display').textContent = randomized
         ? 'Randomized MAC address'
@@ -1175,8 +1259,8 @@ function updateNodeIcon() {
     const randomized = isMacRandomized(nodes[selectedIdx].device.mac);
     const pingClass  = randomized ? 'node-ping warn' : 'node-ping';
     const iconEl     = nodes[selectedIdx].el.querySelector('.node-icon');
-    iconEl.innerHTML = (ICONS[type] || '📡') + `<div class="${pingClass}"></div>`;
-    document.getElementById('p-icon').textContent = ICONS[type] || '📡';
+    iconEl.innerHTML = (ICONS[type] || _svg(`<circle cx="12" cy="12" r="9"/>`)) + `<div class="${pingClass}"></div>`;
+    document.getElementById('p-icon').innerHTML = ICONS[type] || _svg(`<circle cx="12" cy="12" r="9"/>`);
 }
 
 // ── SAVE / DELETE ──────────────────────────────────────────────────────────────
@@ -1349,6 +1433,20 @@ async function runScan() {
         return base;
     });
 
+    // Inject topology-only nodes (e.g. managed switches) not found by the scan
+    const scannedIPs = new Set(devices.map(d => d.ip));
+    (topoData.nodes || []).forEach(n => {
+        if (!n.ip || scannedIPs.has(n.ip)) return;
+        devices.push({
+            ip: n.ip, mac: n.mac || '', vendor: n.vendor || '',
+            hostname: n.hostname || '', type: n.type || 'other',
+            name: n.name || '', room: '', notes: '',
+            randomized: false, _topology_only: true,
+            sysinfo: n.sysinfo, mdns_services: n.mdns_services,
+            open_ports: n.open_ports,
+        });
+    });
+
     if (devices.length === 0) {
         document.getElementById('emptyState').style.display = 'flex';
     } else {
@@ -1359,7 +1457,7 @@ async function runScan() {
     const saveAllRes = await fetch('/save-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(devices)
+        body: JSON.stringify(devices.filter(d => !d._topology_only))
     });
     if (!saveAllRes.ok) {
         toast('⚠ Inventory sync failed');
@@ -1594,6 +1692,77 @@ async function startUpdate() {
             setTimeout(() => location.reload(), 2000);
         }
     }, 600);
+}
+
+// ── SAVE ALL ─────────────────────────────────────────────────────────────────
+async function saveAll() {
+    const btn = document.getElementById('saveAllBtn');
+    btn.disabled = true;
+    try {
+        const res  = await fetch('/save-all', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(devices)
+        });
+        const data = await res.json();
+        toast(data.ok ? `Saved ${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Save failed: ' + (data.error || '?'));
+    } catch (e) {
+        toast('Save error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ── EXPORT ───────────────────────────────────────────────────────────────────
+function toggleExportDrop(e) {
+    e.stopPropagation();
+    document.getElementById('exportDrop').classList.toggle('open');
+}
+document.addEventListener('click', () => {
+    document.getElementById('exportDrop')?.classList.remove('open');
+});
+
+function _downloadFile(name, content, type) {
+    const a   = document.createElement('a');
+    a.href    = URL.createObjectURL(new Blob([content], { type }));
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function exportCSV() {
+    document.getElementById('exportDrop').classList.remove('open');
+    const cols = ['ip','hostname','mac','vendor','type','name','room','notes','open_ports','mdns_services','ssdp_server','opt55_os'];
+    const header = ['IP','Hostname','MAC','Vendor','Type','Name','Room','Notes','Open Ports','mDNS Services','SSDP Server','OS Hint'];
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = devices.map(d => [
+        d.ip, d.hostname, d.mac, d.vendor, d.type, d.name, d.room, d.notes,
+        (d.open_ports  || []).join(';'),
+        (d.mdns_services || []).join(';'),
+        d.ssdp_server, d.opt55_os
+    ].map(esc).join(','));
+    _downloadFile(
+        `nettrack-devices-${new Date().toISOString().slice(0,10)}.csv`,
+        [header.join(','), ...rows].join('\r\n'),
+        'text/csv'
+    );
+    toast(`Exported ${devices.length} devices as CSV`);
+}
+
+function exportJSON() {
+    document.getElementById('exportDrop').classList.remove('open');
+    const payload = {
+        exported_at: new Date().toISOString(),
+        subnet:      document.getElementById('hSubnet').textContent,
+        devices,
+        topology: { edges: topoEdges }
+    };
+    _downloadFile(
+        `nettrack-export-${new Date().toISOString().slice(0,10)}.json`,
+        JSON.stringify(payload, null, 2),
+        'application/json'
+    );
+    toast(`Exported ${devices.length} devices as JSON`);
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────

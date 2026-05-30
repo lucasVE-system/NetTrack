@@ -25,7 +25,7 @@ def main() -> int:
         "topology",
         "version",
         "pysnmp", "pysnmp.hlapi", "zeroconf", "zeroconf._protocol",
-        "dns", "mac_vendor_lookup", "scapy", "scapy.layers.l2", "scapy.sendrecv",
+        "dns", "mac_vendor_lookup",
         "flask", "jinja2", "werkzeug",
         "webview", "webview.platforms", "webview.platforms.winforms",
         "pythonnet", "clr",

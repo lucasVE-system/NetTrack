@@ -1,19 +1,4 @@
-r"""
-app.py  –  NetTrack Flask backend
-==================================
-Serves the web UI and all API endpoints.
-
-Security notes
---------------
-* Flask is bound to 127.0.0.1 only – not reachable from the network.
-* SNMP community strings are stored server-side only; they are accepted from
-  the frontend (user configured them) but NEVER echoed back in any response.
-* All subprocess calls inside topology.py use list args + timeouts.
-* Input validation happens at every endpoint before touching the filesystem
-  or calling topology functions.
-* devices.json and topology.json live in %APPDATA%\NetTrack when frozen
-  (installed), or next to the script when running from source.
-"""
+"""app.py – NetTrack Flask backend. Serves the UI and all API endpoints."""
 
 from __future__ import annotations
 
@@ -308,12 +293,8 @@ def run_topology_discovery(scan_devices: List[Dict],
                             run_ssdp:       bool = True,
                             run_netbios:    bool = True,
                             run_banners:    bool = True):
-    """
-    Full multi-phase topology discovery. Runs in a background thread.
-    Results are saved to topology.json and merged into devices.json.
-    """
     try:
-        _run_topology_discovery_impl(
+        _run_discovery(
             scan_devices, local_ip,
             run_traceroute, run_snmp, run_passive,
             run_mdns, run_ssdp, run_netbios, run_banners,
@@ -322,15 +303,9 @@ def run_topology_discovery(scan_devices: List[Dict],
         _update_topo_state(status="error", error=str(e), phase="")
 
 
-def _run_topology_discovery_impl(scan_devices: List[Dict],
-                                  local_ip: str,
-                                  run_traceroute: bool,
-                                  run_snmp: bool,
-                                  run_passive: bool,
-                                  run_mdns: bool,
-                                  run_ssdp: bool,
-                                  run_netbios: bool,
-                                  run_banners: bool):
+def _run_discovery(scan_devices, local_ip,
+                   run_traceroute, run_snmp, run_passive,
+                   run_mdns, run_ssdp, run_netbios, run_banners):
     now_ms = int(time.time() * 1000)
     _update_topo_state(
         status="running",

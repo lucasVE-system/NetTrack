@@ -1,24 +1,4 @@
-"""
-topology.py  –  NetTrack topology discovery engine
-====================================================
-Phase 1  : Traceroute-based L3 hop inference  (no credentials, works everywhere)
-Phase 2  : SNMP  – neighbor tables, ARP cache, interface list  (managed switches)
-Phase 3  : Passive pcap  – LLDP frame sniffing + DHCP fingerprinting  (admin/pcap cap)
-Enrichment: mDNS / Bonjour service discovery + SSDP / UPnP device descriptions
-             NetBIOS name queries  (fallback hostname for Windows boxes)
-             Banner grabbing on fingerprint ports
-
-Security notes
---------------
-* SNMP community strings are kept in memory only; never logged, never returned to
-  the frontend in any response.
-* All subprocess calls use list args (no shell=True) and strict timeouts.
-* IP addresses are validated before use as subprocess arguments.
-* pcap sniffing is read-only (BPF filter, no injection).
-* SSDP / mDNS / NetBIOS are read-only queries on local iface only.
-* Banner grabbing connects only to IPs already discovered by the scan endpoint.
-* SNMP OIDs are hardcoded – no user-supplied OID strings are ever sent to pysnmp.
-"""
+"""topology.py – NetTrack multi-phase network discovery engine."""
 
 from __future__ import annotations
 
@@ -50,23 +30,6 @@ try:
     _ZEROCONF_OK = True
 except Exception:
     _ZEROCONF_OK = False
-
-# Scapy has known issues on some environments (broken IPv6 routes).
-# We import only what we need and only if it works.
-_SCAPY_OK = False
-_scapy_sniff = None
-_scapy_lldp  = None
-try:
-    import scapy.config
-    scapy.config.conf.use_pcap = True          # prefer libpcap
-    scapy.config.conf.verb    = 0              # silence scapy noise
-    # Import only the L2/ARP layer – avoid inet6 which is broken in this env
-    from scapy.layers.l2 import Ether, ARP
-    from scapy.sendrecv import sniff as _sniff
-    _scapy_sniff = _sniff
-    _SCAPY_OK    = True
-except Exception:
-    pass
 
 # ── IP validation helper ──────────────────────────────────────────────────────
 _IP_RE = re.compile(r'^(\d{1,3}\.){3}\d{1,3}$')
@@ -197,8 +160,6 @@ _OID_SYSOID     = "1.3.6.1.2.1.1.2.0"
 _OID_IF_TABLE   = "1.3.6.1.2.1.2.2"      # ifTable
 _OID_IP_NETTOMEDIA = "1.3.6.1.2.1.4.22"  # ipNetToMediaTable (ARP cache)
 _OID_LLDP_REM   = "1.0.8802.1.1.2.1.4"   # lldpRemTable
-_OID_CDP_CACHE  = "1.3.6.1.4.1.9.9.23.1.2.1"  # cdpCacheTable (Cisco)
-_OID_BRIDGE_FDB = "1.3.6.1.2.1.17.4.3"   # dot1dTpFdbTable (bridge FDB)
 
 
 def _snmp_get(ip: str, community: str, oid: str,
@@ -260,17 +221,6 @@ def snmp_get_sysinfo(ip: str, community: str, port: int = 161) -> Dict:
     }
 
 
-def _parse_mac_from_oid_suffix(oid_str: str) -> str:
-    """Extract MAC from OID suffix like '...1.0.80.8.2.0.34'."""
-    parts = oid_str.split('.')
-    if len(parts) >= 6:
-        try:
-            mac_parts = parts[-6:]
-            return ':'.join(f'{int(p):02X}' for p in mac_parts)
-        except Exception:
-            pass
-    return ""
-
 
 def snmp_get_arp_table(ip: str, community: str, port: int = 161) -> Dict[str, str]:
     """Walk ipNetToMediaTable → {ip: mac}."""
@@ -327,53 +277,6 @@ def snmp_get_lldp_neighbors(ip: str, community: str, port: int = 161) -> List[Di
     return neighbors
 
 
-def snmp_get_cdp_neighbors(ip: str, community: str, port: int = 161) -> List[Dict]:
-    """Walk cdpCacheTable (Cisco) → list of neighbor dicts."""
-    neighbors = []
-    rows = _snmp_walk(ip, community, _OID_CDP_CACHE, port=port, max_rows=256)
-    remote: Dict[str, Dict] = {}
-    for oid_str, val in rows:
-        parts = oid_str.split('.')
-        try:
-            key = f"{parts[-2]}.{parts[-1]}"
-        except IndexError:
-            continue
-        entry = remote.setdefault(key, {})
-        if "cdpCacheDeviceId" in oid_str:
-            entry["device_id"] = val
-        elif "cdpCacheDevicePort" in oid_str:
-            entry["remote_port"] = val
-        elif "cdpCachePlatform" in oid_str:
-            entry["platform"] = val
-        elif "cdpCacheAddress" in oid_str:
-            # value may be hex IP
-            if _valid_ip(val):
-                entry["mgmt_ip"] = val
-    return [v for v in remote.values() if v]
-
-
-def snmp_get_fdb(ip: str, community: str, port: int = 161) -> List[Dict]:
-    """
-    Walk dot1dTpFdbTable → [{mac, port_index, status}]
-    Useful for knowing which MAC addresses are behind which switch port.
-    """
-    rows = _snmp_walk(ip, community, _OID_BRIDGE_FDB, port=port, max_rows=2048)
-    fdb_port: Dict[str, str]   = {}
-    fdb_status: Dict[str, str] = {}
-    for oid_str, val in rows:
-        mac = _parse_mac_from_oid_suffix(oid_str)
-        if not mac:
-            continue
-        if "dot1dTpFdbPort" in oid_str or ".17.4.3.1.2." in oid_str:
-            fdb_port[mac] = val
-        elif "dot1dTpFdbStatus" in oid_str or ".17.4.3.1.3." in oid_str:
-            fdb_status[mac] = val
-
-    return [
-        {"mac": mac, "port_index": fdb_port.get(mac, ""),
-         "status": fdb_status.get(mac, "")}
-        for mac in set(fdb_port) | set(fdb_status)
-    ]
 
 
 def snmp_full_discovery(ip: str, community: str, *, port: int = 161) -> Dict:
@@ -390,9 +293,6 @@ def snmp_full_discovery(ip: str, community: str, *, port: int = 161) -> Dict:
     result["sysinfo"]   = snmp_get_sysinfo(ip, community, port=port)
     result["arp_table"] = snmp_get_arp_table(ip, community, port=port)
     result["lldp"]      = snmp_get_lldp_neighbors(ip, community, port=port)
-    result["cdp"]       = snmp_get_cdp_neighbors(ip, community, port=port)
-    result["fdb"]       = snmp_get_fdb(ip, community, port=port)
-    # community string deliberately excluded from result
     return result
 
 
@@ -635,15 +535,9 @@ class _LLDPSniffer:
         self._available = False
 
     def start(self, iface: str = "", duration: int = 30) -> bool:
+        if sys.platform == "win32":
+            return False  # AF_PACKET not available on Windows without Npcap
         try:
-            if sys.platform == "win32":
-                # On Windows, use scapy if available; otherwise skip
-                if not _SCAPY_OK:
-                    return False
-                self._use_scapy = True
-            else:
-                self._use_scapy = False
-
             self._iface    = iface
             self._running  = True
             self._available = True
@@ -655,31 +549,8 @@ class _LLDPSniffer:
             return False
 
     def _run(self, duration: int):
-        if self._use_scapy and _scapy_sniff:
-            # Scapy path (Windows)
-            try:
-                _scapy_sniff(
-                    filter="ether proto 0x88CC",
-                    prn=self._handle_scapy,
-                    timeout=duration,
-                    store=False
-                )
-            except Exception:
-                pass
-        else:
-            # Raw socket path (Linux)
-            self._run_raw(duration)
+        self._run_raw(duration)
         self._running = False
-
-    def _handle_scapy(self, pkt):
-        try:
-            raw = bytes(pkt)
-            parsed = _parse_lldp_frame(raw)
-            if parsed:
-                with self._lock:
-                    self._frames.append(parsed)
-        except Exception:
-            pass
 
     def _run_raw(self, duration: int):
         try:
@@ -1077,7 +948,6 @@ def infer_device_type(device: Dict) -> str:
     vendor_class = (device.get("vendor_class") or "").lower()
     opt55_os  = (device.get("opt55_os") or "").lower()
     lldp_info = device.get("lldp_neighbors") or []
-    cdp_info  = device.get("cdp_neighbors") or []
 
     # Infrastructure first (highest confidence)
     infra_keywords = {
@@ -1306,14 +1176,6 @@ def build_topology_graph(
                 add_edge(ip, peer_ip, "lldp",
                          remote_port=neighbor.get("remote_port", ""),
                          sys_name=neighbor.get("sys_name", ""))
-
-    # Edges from SNMP CDP
-    for ip, snmp in (snmp_results or {}).items():
-        for neighbor in snmp.get("cdp", []):
-            peer_ip = neighbor.get("mgmt_ip", "")
-            if peer_ip and _valid_ip(peer_ip):
-                add_edge(ip, peer_ip, "cdp",
-                         device_id=neighbor.get("device_id", ""))
 
     # Edges from passive LLDP frames
     for frame in (lldp_frames or []):
