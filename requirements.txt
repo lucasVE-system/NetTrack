@@ -1,6 +1,7 @@
 # NetTrack — core (minimal scan + UI)
 flask>=3.0
 mac-vendor-lookup>=0.1.12
+pywebview>=4.0
 
 # Optional — full topology discovery (install as needed)
 # pysnmp>=4.4       # SNMP queries (switches / ARP / LLDP via management)

@@ -20,13 +20,15 @@ def main() -> int:
         return 1
 
     hidden = [
-      "dns_sniffer", 
+        "dns_sniffer",
         "app",
         "topology",
         "version",
         "pysnmp", "pysnmp.hlapi", "zeroconf", "zeroconf._protocol",
         "dns", "mac_vendor_lookup", "scapy", "scapy.layers.l2", "scapy.sendrecv",
         "flask", "jinja2", "werkzeug",
+        "webview", "webview.platforms", "webview.platforms.winforms",
+        "pythonnet", "clr",
     ]
     hi_args: list[str] = []
     for m in hidden:
