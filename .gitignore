@@ -5,44 +5,32 @@ __pycache__/
 *.pyd
 *.pdb
 
-# Virtual Environment
+# Virtual environments
 venv/
-.env
 .venv/
 *.env
+.env
 
 # PyInstaller
+build/
+dist/
 *.spec
 !NetTrack.spec
-build/
-dist/
-
-# IDE files
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# Local network data
-local_network_data/
-
-build/
-dist/
-*.exe
-*.spec
-*.dist
-__pycache__/
-
-
 launcher.build/
 launcher.dist/
 launcher.onefile-build/
+*.exe
 
-# Cursor local metadata
+# IDE / editor
+.vscode/
+.idea/
 .cursor/
+*.sublime-project
+*.sublime-workspace
 
-# Local runtime/private app data
+# Local runtime data (never commit these)
 devices.json
 topology.json
 snmp_config.json
+dns_log.json
 debug-*.log
