@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+import hashlib
 import json
 import os
-import re
 import secrets
-import socket
 import subprocess
 import sys
 import threading
@@ -20,12 +20,41 @@ from dns_sniffer import DNSSniffer
 from flask import Flask, jsonify, render_template, request
 from version import VERSION, GITHUB_REPO
 
+import signing
 import topology as topo
+from scanner import (
+    get_local_ip,
+    get_subnet,
+    scan_subnet_devices,
+)
 
 app = Flask(__name__)
 
 def api_error(message: str, status: int = 400):
     return jsonify({"ok": False, "error": message}), status
+
+# ── SIMPLE RATE LIMIT ─────────────────────────────────────────────────────────
+# The app is localhost-only, so this is a guard against runaway clients
+# hammering expensive scan endpoints, not against hostile traffic.
+_rate_lock = threading.Lock()
+_rate_last: Dict[str, float] = {}
+
+def rate_limited(min_interval_s: float):
+    """Reject calls to the wrapped endpoint within min_interval_s of the last one."""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            if app.config.get("TESTING"):
+                return fn(*args, **kwargs)
+            now = time.monotonic()
+            with _rate_lock:
+                last = _rate_last.get(fn.__name__, 0.0)
+                if now - last < min_interval_s:
+                    return api_error("Too many requests; try again shortly", 429)
+                _rate_last[fn.__name__] = now
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
 
 # ── BASE DIR ──────────────────────────────────────────────────────────────────
 def get_base_dir() -> str:
@@ -47,18 +76,6 @@ def get_topology_file() -> str:
 def get_snmp_config_file() -> str:
     # Stored separately so it's easy to exclude from version control
     return os.path.join(get_base_dir(), "snmp_config.json")
-
-# ── MAC VENDOR LOOKUP ─────────────────────────────────────────────────────────
-_mac_lookup = None
-def get_mac_lookup():
-    global _mac_lookup
-    if _mac_lookup is None:
-        try:
-            from mac_vendor_lookup import MacLookup
-            _mac_lookup = MacLookup()
-        except Exception:
-            _mac_lookup = False
-    return _mac_lookup if _mac_lookup else None
 
 # ── DEVICE STORE ──────────────────────────────────────────────────────────────
 def load_devices() -> List[Dict]:
@@ -102,9 +119,32 @@ def save_topology(data: Dict):
         json.dump(data, f, indent=2)
 
 # ── SNMP CONFIG STORE ─────────────────────────────────────────────────────────
-# {ip: {community: str, port: int}}  –  never returned to frontend
+# {ip: {version, community, user, auth_key, priv_key, port}} – never returned
+# to the frontend.
 _snmp_config: Dict[str, Dict] = {}
 _snmp_config_lock = threading.Lock()
+
+_SNMP_VERSIONS = {"v2c", "v3"}
+_SNMP_V3_PROTOS = {"auth_proto": {"sha", "md5"}, "priv_proto": {"aes", "des"}}
+
+def _valid_snmp_entry(ip: str, entry) -> bool:
+    """Schema check for one snmp_config.json entry; invalid entries are dropped."""
+    if not isinstance(entry, dict):
+        return False
+    if ip != "*" and not topo._valid_ip(ip):
+        return False
+    port = entry.get("port", 161)
+    if not isinstance(port, int) or not (1 <= port <= 65535):
+        return False
+    version = entry.get("version", "v2c")
+    if version not in _SNMP_VERSIONS:
+        return False
+    for field, allowed in _SNMP_V3_PROTOS.items():
+        if entry.get(field) and entry[field] not in allowed:
+            return False
+    if version == "v3":
+        return bool(entry.get("user"))
+    return bool(entry.get("community"))
 
 def load_snmp_config():
     global _snmp_config
@@ -115,8 +155,10 @@ def load_snmp_config():
         with open(path, "r") as f:
             data = json.load(f)
         if isinstance(data, dict):
+            valid = {ip: cfg for ip, cfg in data.items()
+                     if _valid_snmp_entry(ip, cfg)}
             with _snmp_config_lock:
-                _snmp_config = data
+                _snmp_config = valid
     except Exception:
         pass
 
@@ -131,117 +173,6 @@ def get_snmp_for_ip(ip: str) -> Optional[Dict]:
         # Exact match first, then wildcard
         entry = _snmp_config.get(ip) or _snmp_config.get("*")
     return entry
-
-# ── NETWORK HELPERS ───────────────────────────────────────────────────────────
-def get_local_ip() -> str:
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "192.168.1.1"
-
-def get_subnet(local_ip: str) -> str:
-    return ".".join(local_ip.split(".")[:3])
-
-def ping_host(ip: str) -> bool:
-    try:
-        kwargs = {}
-        if sys.platform == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-        result = subprocess.run(
-            ["ping", "-n" if sys.platform == "win32" else "-c", "1",
-             "-w" if sys.platform == "win32" else "-W",
-             "300" if sys.platform == "win32" else "1", ip],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=1, **kwargs
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-def get_arp_table() -> Dict[str, str]:
-    discovered: Dict[str, str] = {}
-    try:
-        kwargs = {"creationflags": subprocess.CREATE_NO_WINDOW} \
-            if sys.platform == "win32" else {}
-        result = subprocess.run(
-            ["arp", "-a"], capture_output=True, text=True,
-            timeout=5, **kwargs
-        )
-        for line in result.stdout.splitlines():
-            match = re.search(
-                r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+([\w-]{17})', line)
-            if match:
-                ip  = match.group(1)
-                mac = match.group(2).replace("-", ":").upper()
-                if (not ip.endswith(".255")
-                        and not ip.startswith("224.")
-                        and not ip.startswith("239.")
-                        and mac != "FF:FF:FF:FF:FF:FF"):
-                    discovered[ip] = mac
-    except Exception as e:
-        print(f"ARP error: {e}")
-    return discovered
-
-def lookup_vendor(mac: str) -> str:
-    try:
-        ml = get_mac_lookup()
-        if ml:
-            return ml.lookup(mac)
-    except Exception:
-        pass
-    return ""
-
-def get_hostname(ip: str) -> str:
-    try:
-        return socket.gethostbyaddr(ip)[0]
-    except Exception:
-        return ""
-
-def ping_sweep(subnet: str) -> List[str]:
-    if not topo._safe_subnet(subnet):
-        return []
-    alive: List[str] = []
-    ips = [f"{subnet}.{i}" for i in range(1, 255)]
-    with ThreadPoolExecutor(max_workers=50) as executor:
-        futures = {executor.submit(ping_host, ip): ip for ip in ips}
-        for future in as_completed(futures):
-            try:
-                if future.result():
-                    alive.append(futures[future])
-            except Exception:
-                pass
-    return alive
-
-def scan_subnet_devices(subnet: str, local_ip: str = "") -> List[Dict]:
-    """Run scan pipeline for a single /24-style subnet prefix (e.g. 192.168.1)."""
-    arp_before = get_arp_table()
-    alive_ips  = ping_sweep(subnet)
-    arp_after  = get_arp_table()
-    arp_results = {**arp_before, **arp_after}
-
-    all_ips = set(list(arp_results.keys()) + alive_ips)
-    if local_ip:
-        all_ips.discard(local_ip)
-
-    found: Dict[str, Dict] = {}
-    for ip in all_ips:
-        if not topo._valid_ip(ip):
-            continue
-        if not ip.startswith(subnet + "."):
-            continue
-        mac    = arp_results.get(ip, "")
-        vendor = lookup_vendor(mac) if mac else ""
-        host   = get_hostname(ip)
-        found[ip] = {"ip": ip, "mac": mac, "vendor": vendor, "hostname": host}
-
-    return sorted(
-        found.values(),
-        key=lambda x: tuple(int(p) for p in x["ip"].split("."))
-    )
 
 # ── BACKGROUND TOPOLOGY JOB ───────────────────────────────────────────────────
 _topo_state: Dict = {
@@ -342,10 +273,10 @@ def _run_discovery(scan_devices, local_ip,
             cfg = get_snmp_for_ip(ip)
             if not cfg:
                 continue
-            community = cfg.get("community", "public")
-            port      = int(cfg.get("port", 161))
+            port = int(cfg.get("port", 161))
             try:
-                result = topo.snmp_full_discovery(ip, community, port=port)
+                # cfg is a credential dict (v2c or v3); see topo._snmp_auth_data
+                result = topo.snmp_full_discovery(ip, cfg, port=port)
                 snmp_results[ip] = result
             except Exception as e:
                 if snmp_err_count < 8:
@@ -526,20 +457,25 @@ def snmp_config_get():
     Frontend only sees which IPs have SNMP configured.
     """
     with _snmp_config_lock:
-        safe = {ip: {"port": cfg.get("port", 161), "has_community": True}
+        safe = {ip: {"port": cfg.get("port", 161),
+                     "version": cfg.get("version", "v2c"),
+                     "has_community": True}
                 for ip, cfg in _snmp_config.items()}
     return jsonify(safe)
 
 @app.route("/snmp-config", methods=["POST"])
 def snmp_config_set():
     """
-    Add/update an SNMP entry. Accepts {ip, community, port}.
+    Add/update an SNMP entry.
+    v2c: {ip, community, port}
+    v3:  {ip, version: "v3", user, auth_key?, auth_proto? (sha|md5),
+          priv_key?, priv_proto? (aes|des), port}
     ip can be "*" for a wildcard (all devices).
-    Community string is stored server-side only, never returned.
+    Credentials are stored server-side only, never returned.
     """
     data = request.get_json(silent=True) or {}
-    ip   = data.get("ip", "").strip()
-    community = data.get("community", "").strip()
+    ip      = data.get("ip", "").strip()
+    version = (data.get("version") or "v2c").strip().lower()
     try:
         port = int(data.get("port", 161))
     except (TypeError, ValueError):
@@ -547,13 +483,34 @@ def snmp_config_set():
 
     if ip != "*" and not topo._valid_ip(ip):
         return api_error("Invalid IP", 400)
-    if not community:
-        return api_error("Community string required", 400)
     if not (1 <= port <= 65535):
         return api_error("Invalid port", 400)
+    if version not in _SNMP_VERSIONS:
+        return api_error("version must be v2c or v3", 400)
+
+    if version == "v3":
+        user = (data.get("user") or "").strip()
+        if not user:
+            return api_error("SNMPv3 requires a user", 400)
+        entry = {"version": "v3", "user": user, "port": port}
+        for key in ("auth_key", "priv_key"):
+            val = (data.get(key) or "").strip()
+            if val:
+                entry[key] = val
+        for key, allowed in _SNMP_V3_PROTOS.items():
+            val = (data.get(key) or "").strip().lower()
+            if val:
+                if val not in allowed:
+                    return api_error(f"{key} must be one of {sorted(allowed)}", 400)
+                entry[key] = val
+    else:
+        community = (data.get("community") or "").strip()
+        if not community:
+            return api_error("Community string required", 400)
+        entry = {"version": "v2c", "community": community, "port": port}
 
     with _snmp_config_lock:
-        _snmp_config[ip] = {"community": community, "port": port}
+        _snmp_config[ip] = entry
     save_snmp_config()
     return jsonify({"ok": True})
 
@@ -619,6 +576,7 @@ def dns_clear():
 
 # ── SCAN ──────────────────────────────────────────────────────────────────────
 @app.route("/scan")
+@rate_limited(5.0)
 def scan():
     local_ip   = get_local_ip()
     subnet     = get_subnet(local_ip)
@@ -631,6 +589,7 @@ def scan():
     })
 
 @app.route("/scan-multi", methods=["POST"])
+@rate_limited(5.0)
 def scan_multi():
     data = request.get_json(silent=True) or {}
     raw_subnets = data.get("subnets")
@@ -779,6 +738,8 @@ def fetch_latest_release():
 
 _update_state: Dict = {"status": "idle", "progress": 0, "error": ""}
 _latest_exe_url: Optional[str] = None
+_latest_sha_url: Optional[str] = None
+_latest_sig_url: Optional[str] = None
 _update_token = secrets.token_urlsafe(24)
 
 ALLOWED_UPDATE_HOSTS = {"github.com", "objects.githubusercontent.com"}
@@ -813,14 +774,35 @@ def check_update():
     current_ver = parse_version(VERSION)
     if latest_ver <= current_ver:
         return jsonify({"update": False, "current": VERSION, "latest": latest_tag})
-    exe_url = None
+    exe_url = sha_url = None
+    exe_name = ""
     for asset in release.get("assets", []):
         if asset["name"].lower().endswith(".exe"):
-            exe_url = asset["browser_download_url"]
+            exe_url  = asset["browser_download_url"]
+            exe_name = asset["name"]
             break
+    # Optional integrity sidecars published with the release:
+    #   "<exe_name>.sig"    – RSA signature, verified against the embedded
+    #                         public key (protects against repo compromise)
+    #   "<exe_name>.sha256" – plain checksum (protects against corruption)
+    sig_url = None
+    if exe_name:
+        for asset in release.get("assets", []):
+            name = asset["name"].lower()
+            if name == exe_name.lower() + ".sha256":
+                sha_url = asset["browser_download_url"]
+            elif name == exe_name.lower() + ".sig":
+                sig_url = asset["browser_download_url"]
     if exe_url and not is_allowed_update_url(exe_url):
         exe_url = None
+    if sha_url and not is_allowed_update_url(sha_url):
+        sha_url = None
+    if sig_url and not is_allowed_update_url(sig_url):
+        sig_url = None
     _latest_exe_url = exe_url
+    global _latest_sha_url, _latest_sig_url
+    _latest_sha_url = sha_url
+    _latest_sig_url = sig_url
     return jsonify({
         "update":       True,
         "current":      VERSION,
@@ -873,6 +855,32 @@ def do_update():
                         if total > 0:
                             _update_state["progress"] = int(downloaded / total * 100)
             _update_state["progress"] = 100
+            _update_state["status"]   = "verifying"
+            # Strongest check first: RSA signature against the embedded
+            # public key. Falls back to the SHA256 sidecar (corruption-only
+            # protection) for releases published before signing was adopted.
+            if _latest_sig_url:
+                sig_req = urllib.request.Request(
+                    _latest_sig_url, headers={"User-Agent": "NetTrack-updater"})
+                with urllib.request.urlopen(sig_req, timeout=30) as resp:
+                    sig_hex = resp.read(4096).decode().strip()
+                if not signing.verify_signature(tmp, sig_hex):
+                    raise ValueError(
+                        "Release signature invalid: download tampered or "
+                        "signed with the wrong key")
+            elif signing.REQUIRE_SIGNATURE:
+                raise ValueError("Release is not signed; update refused")
+            elif _latest_sha_url:
+                sha_req = urllib.request.Request(
+                    _latest_sha_url, headers={"User-Agent": "NetTrack-updater"})
+                with urllib.request.urlopen(sha_req, timeout=30) as resp:
+                    expected = resp.read(1024).decode().split()[0].strip().lower()
+                h = hashlib.sha256()
+                with open(tmp, "rb") as f:
+                    for chunk in iter(lambda: f.read(65536), b""):
+                        h.update(chunk)
+                if h.hexdigest() != expected:
+                    raise ValueError("SHA256 mismatch: download corrupt or tampered")
             _update_state["status"]   = "replacing"
             if os.path.exists(bak):
                 os.remove(bak)

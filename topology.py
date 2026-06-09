@@ -19,7 +19,9 @@ from typing import Dict, List, Optional, Tuple
 try:
     from pysnmp.hlapi import (
         CommunityData, ContextData, ObjectIdentity, ObjectType,
-        SnmpEngine, UdpTransportTarget, bulkCmd, getCmd, nextCmd,
+        SnmpEngine, UdpTransportTarget, UsmUserData, bulkCmd, getCmd, nextCmd,
+        usmAesCfb128Protocol, usmDESPrivProtocol,
+        usmHMACMD5AuthProtocol, usmHMACSHAAuthProtocol,
     )
     _SNMP_OK = True
 except Exception:
@@ -162,15 +164,45 @@ _OID_IP_NETTOMEDIA = "1.3.6.1.2.1.4.22"  # ipNetToMediaTable (ARP cache)
 _OID_LLDP_REM   = "1.0.8802.1.1.2.1.4"   # lldpRemTable
 
 
-def _snmp_get(ip: str, community: str, oid: str,
+def _snmp_auth_data(cred):
+    """
+    Build a pysnmp auth object from a credential.
+
+    cred may be:
+      - a plain community string (SNMPv2c, backward compatible), or
+      - a dict: {version: "v2c"|"v3", community, user,
+                 auth_key, auth_proto ("sha"|"md5"),
+                 priv_key, priv_proto ("aes"|"des")}
+    """
+    if isinstance(cred, str):
+        return CommunityData(cred, mpModel=1)
+    if (cred.get("version") or "v2c") == "v3":
+        kwargs = {}
+        if cred.get("auth_key"):
+            kwargs["authKey"] = cred["auth_key"]
+            kwargs["authProtocol"] = (
+                usmHMACMD5AuthProtocol
+                if (cred.get("auth_proto") or "sha").lower() == "md5"
+                else usmHMACSHAAuthProtocol)
+        if cred.get("priv_key"):
+            kwargs["privKey"] = cred["priv_key"]
+            kwargs["privProtocol"] = (
+                usmDESPrivProtocol
+                if (cred.get("priv_proto") or "aes").lower() == "des"
+                else usmAesCfb128Protocol)
+        return UsmUserData(cred.get("user", ""), **kwargs)
+    return CommunityData(cred.get("community", "public"), mpModel=1)
+
+
+def _snmp_get(ip: str, community, oid: str,
               port: int = 161, timeout: int = 3, retries: int = 1):
-    """Single SNMP GET. Returns value string or None."""
+    """Single SNMP GET. community is a string (v2c) or credential dict (v2c/v3)."""
     if not _SNMP_OK or not _valid_ip(ip):
         return None
     try:
         iterator = getCmd(
             SnmpEngine(),
-            CommunityData(community, mpModel=1),   # SNMPv2c
+            _snmp_auth_data(community),
             UdpTransportTarget((ip, port), timeout=timeout, retries=retries),
             ContextData(),
             ObjectType(ObjectIdentity(oid))
@@ -184,7 +216,7 @@ def _snmp_get(ip: str, community: str, oid: str,
         return None
 
 
-def _snmp_walk(ip: str, community: str, oid: str,
+def _snmp_walk(ip: str, community, oid: str,
                port: int = 161, timeout: int = 3, retries: int = 1,
                max_rows: int = 512) -> List[Tuple[str, str]]:
     """SNMP WALK. Returns list of (oid_str, value_str). Capped at max_rows."""
@@ -194,7 +226,7 @@ def _snmp_walk(ip: str, community: str, oid: str,
     try:
         for (errorIndication, errorStatus, _, varBinds) in nextCmd(
             SnmpEngine(),
-            CommunityData(community, mpModel=1),
+            _snmp_auth_data(community),
             UdpTransportTarget((ip, port), timeout=timeout, retries=retries),
             ContextData(),
             ObjectType(ObjectIdentity(oid)),
@@ -210,7 +242,7 @@ def _snmp_walk(ip: str, community: str, oid: str,
     return results
 
 
-def snmp_get_sysinfo(ip: str, community: str, port: int = 161) -> Dict:
+def snmp_get_sysinfo(ip: str, community, port: int = 161) -> Dict:
     """Fetch basic system info (sysName, sysDescr, etc.) via SNMP."""
     return {
         "sysName":    _snmp_get(ip, community, _OID_SYSNAME, port=port)    or "",
@@ -222,7 +254,7 @@ def snmp_get_sysinfo(ip: str, community: str, port: int = 161) -> Dict:
 
 
 
-def snmp_get_arp_table(ip: str, community: str, port: int = 161) -> Dict[str, str]:
+def snmp_get_arp_table(ip: str, community, port: int = 161) -> Dict[str, str]:
     """Walk ipNetToMediaTable → {ip: mac}."""
     result = {}
     rows = _snmp_walk(ip, community, _OID_IP_NETTOMEDIA, port=port)
@@ -245,7 +277,7 @@ def snmp_get_arp_table(ip: str, community: str, port: int = 161) -> Dict[str, st
     return result
 
 
-def snmp_get_lldp_neighbors(ip: str, community: str, port: int = 161) -> List[Dict]:
+def snmp_get_lldp_neighbors(ip: str, community, port: int = 161) -> List[Dict]:
     """Walk lldpRemTable → list of neighbor dicts."""
     neighbors = []
     rows = _snmp_walk(ip, community, _OID_LLDP_REM, port=port, max_rows=256)
@@ -279,10 +311,11 @@ def snmp_get_lldp_neighbors(ip: str, community: str, port: int = 161) -> List[Di
 
 
 
-def snmp_full_discovery(ip: str, community: str, *, port: int = 161) -> Dict:
+def snmp_full_discovery(ip: str, community, *, port: int = 161) -> Dict:
     """
     Run all SNMP queries against a device. Returns a rich topology dict.
-    community string is NEVER returned to the caller in this dict.
+    community is a v2c string or a credential dict (see _snmp_auth_data);
+    credentials are NEVER returned to the caller in this dict.
     """
     if not _SNMP_OK:
         return {"error": "pysnmp not available", "ip": ip}

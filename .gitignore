@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.pdb
+.pytest_cache/
 
 # Virtual environments
 venv/
@@ -34,3 +35,8 @@ topology.json
 snmp_config.json
 dns_log.json
 debug-*.log
+
+# Release signing: private key (NEVER commit; back it up offline) and
+# generated signature files (these belong on the GitHub release, not in git)
+release_key.json
+*.sig

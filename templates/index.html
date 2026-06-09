@@ -635,23 +635,62 @@ textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
     <div id="snmpBox">
         <div class="modal-title">⚙ SNMP Configuration</div>
         <div style="font-family:'Share Tech Mono',monospace;font-size:0.65rem;color:var(--text-dim);line-height:1.6">
-            Configure SNMP v2c community strings for managed switches.<br>
+            Configure SNMP credentials for managed switches (v2c or v3).<br>
             Use <span style="color:var(--accent)">*</span> as IP for a global fallback.<br>
-            Community strings are stored locally and never transmitted.
+            Credentials are stored locally and never transmitted.
         </div>
         <div class="snmp-entry-list" id="snmpEntryList"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:0.5rem">
+        <div style="display:grid;grid-template-columns:1fr 100px 80px;gap:0.5rem">
             <div class="form-group" style="margin:0">
                 <label>IP / *</label>
                 <input type="text" id="snmp-ip" placeholder="192.168.1.1 or *">
             </div>
             <div class="form-group" style="margin:0">
-                <label>Community</label>
-                <input type="password" id="snmp-community" placeholder="public">
+                <label>Version</label>
+                <select id="snmp-version" onchange="toggleSnmpVersionFields()">
+                    <option value="v2c" selected>v2c</option>
+                    <option value="v3">v3</option>
+                </select>
             </div>
             <div class="form-group" style="margin:0">
                 <label>Port</label>
                 <input type="number" id="snmp-port" value="161" min="1" max="65535">
+            </div>
+        </div>
+        <div id="snmp-v2c-fields">
+            <div class="form-group" style="margin:0.5rem 0 0">
+                <label>Community</label>
+                <input type="password" id="snmp-community" placeholder="public">
+            </div>
+        </div>
+        <div id="snmp-v3-fields" style="display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem">
+                <div class="form-group" style="margin:0">
+                    <label>User</label>
+                    <input type="text" id="snmp-user" placeholder="snmpuser">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Auth key (optional)</label>
+                    <input type="password" id="snmp-auth-key" placeholder="auth passphrase">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Auth protocol</label>
+                    <select id="snmp-auth-proto">
+                        <option value="sha" selected>SHA</option>
+                        <option value="md5">MD5</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Priv key (optional)</label>
+                    <input type="password" id="snmp-priv-key" placeholder="priv passphrase">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label>Priv protocol</label>
+                    <select id="snmp-priv-proto">
+                        <option value="aes" selected>AES</option>
+                        <option value="des">DES</option>
+                    </select>
+                </div>
             </div>
         </div>
         <div class="modal-actions">
@@ -1578,7 +1617,7 @@ function renderSnmpList() {
         row.className = 'snmp-entry';
         row.innerHTML = `
             <span class="snmp-ip">${ip}</span>
-            <span class="snmp-port">port ${cfg.port}</span>
+            <span class="snmp-port">port ${cfg.port} · ${cfg.version || 'v2c'}</span>
             <span style="color:var(--accent2);font-size:0.6rem">● configured</span>
             <button class="btn-snmp-del" onclick="deleteSnmpEntry('${ip}')">✕</button>`;
         list.appendChild(row);
@@ -1588,25 +1627,51 @@ function renderSnmpList() {
     }
 }
 
-async function addSnmpEntry() {
-    const ip        = document.getElementById('snmp-ip').value.trim();
-    const community = document.getElementById('snmp-community').value.trim();
-    const port      = parseInt(document.getElementById('snmp-port').value) || 161;
+function toggleSnmpVersionFields() {
+    const v3 = document.getElementById('snmp-version').value === 'v3';
+    document.getElementById('snmp-v2c-fields').style.display = v3 ? 'none' : '';
+    document.getElementById('snmp-v3-fields').style.display  = v3 ? '' : 'none';
+}
 
-    if (!ip || !community) {
-        toast('✗ IP and community required');
-        return;
+async function addSnmpEntry() {
+    const ip      = document.getElementById('snmp-ip').value.trim();
+    const version = document.getElementById('snmp-version').value;
+    const port    = parseInt(document.getElementById('snmp-port').value) || 161;
+
+    let payload = { ip, version, port };
+    if (version === 'v3') {
+        const user = document.getElementById('snmp-user').value.trim();
+        if (!ip || !user) {
+            toast('✗ IP and user required');
+            return;
+        }
+        payload.user       = user;
+        payload.auth_key   = document.getElementById('snmp-auth-key').value.trim();
+        payload.auth_proto = document.getElementById('snmp-auth-proto').value;
+        payload.priv_key   = document.getElementById('snmp-priv-key').value.trim();
+        payload.priv_proto = document.getElementById('snmp-priv-proto').value;
+    } else {
+        const community = document.getElementById('snmp-community').value.trim();
+        if (!ip || !community) {
+            toast('✗ IP and community required');
+            return;
+        }
+        payload.community = community;
     }
+
     const res = await fetch('/snmp-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip, community, port })
+        body: JSON.stringify(payload)
     });
     if (res.ok) {
-        snmpEntries[ip] = { port, has_community: true };
+        snmpEntries[ip] = { port, version, has_community: true };
         renderSnmpList();
         document.getElementById('snmp-ip').value        = '';
         document.getElementById('snmp-community').value = '';
+        document.getElementById('snmp-user').value      = '';
+        document.getElementById('snmp-auth-key').value  = '';
+        document.getElementById('snmp-priv-key').value  = '';
         toast('✓ SNMP entry saved');
     } else {
         const data = await res.json().catch(()=>({}));
@@ -1675,6 +1740,8 @@ async function startUpdate() {
             bar.style.width = data.progress + '%';
             if (data.status === 'downloading') {
                 lbl.textContent = `Downloading... ${data.progress}%`;
+            } else if (data.status === 'verifying') {
+                lbl.textContent = 'Verifying checksum...';
             } else if (data.status === 'replacing') {
                 lbl.textContent = 'Installing...';
             } else if (data.status === 'restarting') {

@@ -32,8 +32,27 @@ Local network inventory and topology mapping. The web UI listens on **127.0.0.1*
 
 - Server binds to loopback only (127.0.0.1)
 - Subprocess calls use argv lists and timeouts (see `topology.py` / `app.py` headers)
-- SNMP communities are never echoed to the frontend
+- SNMP credentials (v2c communities and v3 keys) are never echoed to the frontend
 - Update downloads are validated against a hardcoded host/path allowlist
+- Update downloads are verified against an RSA signature (`.sig` release asset)
+  using the public key embedded in `signing.py`; without a `.sig`, a `.sha256`
+  checksum asset is checked instead (corruption protection only)
+
+## Signing a release (maintainer)
+
+The private key (`release_key.json`, gitignored) must stay on your machine —
+back it up offline. One-time setup: `python scripts/sign_release.py keygen`
+(already done; the matching public key is embedded in `signing.py`).
+
+For every release:
+
+1. Build the exe: `python build.py`
+2. Sign it: `python scripts/sign_release.py sign dist/NetTrack.exe`
+3. Upload **both** `NetTrack.exe` and `NetTrack.exe.sig` to the GitHub release
+
+Once all supported releases are signed, set `REQUIRE_SIGNATURE = True` in
+`signing.py` so the updater refuses unsigned releases (closes the downgrade
+loophole where an attacker simply omits the `.sig`).
 
 ## Safe Push Guardrails
 
