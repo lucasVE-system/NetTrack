@@ -22,6 +22,8 @@ def main() -> int:
     hidden = [
         "dns_sniffer",
         "app",
+        "scanner",
+        "signing",
         "topology",
         "version",
         "pysnmp", "pysnmp.hlapi", "zeroconf", "zeroconf._protocol",
@@ -35,12 +37,14 @@ def main() -> int:
         hi_args.extend(["--hidden-import", m])
 
     sep = ";" if sys.platform == "win32" else ":"
+    static = os.path.join(ROOT, "static")
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean",
         "--onefile", "--windowed",
         "--name", "NetTrack",
         f"--add-data={templates}{sep}templates",
+        f"--add-data={static}{sep}static",
         *hi_args,
         os.path.join(ROOT, "launcher.py"),
     ]

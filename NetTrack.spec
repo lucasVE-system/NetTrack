@@ -2,11 +2,11 @@
 
 
 a = Analysis(
-    ['C:\\Users\\vanee\\Desktop\\webapp\\launcher.py'],
+    ['C:\\Users\\vanee\\Desktop\\Dev\\nettrack\\nettrack-project\\NetTrack\\launcher.py'],
     pathex=[],
     binaries=[],
-    datas=[('C:\\Users\\vanee\\Desktop\\webapp\\templates', 'templates')],
-    hiddenimports=['dns_sniffer', 'app', 'topology', 'version', 'pysnmp', 'pysnmp.hlapi', 'zeroconf', 'zeroconf._protocol', 'dns', 'mac_vendor_lookup', 'flask', 'jinja2', 'werkzeug', 'webview', 'webview.platforms', 'webview.platforms.winforms', 'pythonnet', 'clr'],
+    datas=[('C:\\Users\\vanee\\Desktop\\Dev\\nettrack\\nettrack-project\\NetTrack\\templates', 'templates'), ('C:\\Users\\vanee\\Desktop\\Dev\\nettrack\\nettrack-project\\NetTrack\\static', 'static')],
+    hiddenimports=['dns_sniffer', 'app', 'scanner', 'signing', 'topology', 'version', 'pysnmp', 'pysnmp.hlapi', 'zeroconf', 'zeroconf._protocol', 'dns', 'mac_vendor_lookup', 'flask', 'jinja2', 'werkzeug', 'webview', 'webview.platforms', 'webview.platforms.winforms', 'pythonnet', 'clr'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\vanee\\Desktop\\webapp\\app-icon.ico'],
+    icon=['C:\\Users\\vanee\\Desktop\\Dev\\nettrack\\nettrack-project\\NetTrack\\app-icon.ico'],
 )
